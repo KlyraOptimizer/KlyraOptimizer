@@ -5,7 +5,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-7376F6.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 [![Platform: Windows 10 & 11](https://img.shields.io/badge/Windows-10%20%7C%2011%20(x64)-4B90F5?style=for-the-badge&logo=windows)](https://github.com)
-[![Version: V1.4.1](https://shields.io)](https://github.com/KlyraOptimizer)
+[![Version: V1.4.1](https://img.shields.io/badge/Release-V1.4.1%20Anti--Conflict-D96570?style=for-the-badge)](https://github.com/KlyraOptimizer/KlyraOptimizer)
 [![Author: @AzureOptimizer](https://img.shields.io/badge/Criador-@KlyraOptimizer-F48F68?style=for-the-badge&logo=github)](https://github.com/KlyraOptimizer)
 
 <p align="center">
