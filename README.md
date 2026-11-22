@@ -9,7 +9,7 @@
 [![Author: @KlyraOptimizer](https://shields.io)](https://github.com)
 
 <p align="center">
-  O <strong>Klyra Optimizer+</strong> é um script <code>.bat</code> de código aberto para otimização do Windows 10 e 11 que divide as modificações em <strong>3 camadas claras de segurança</strong> (Standard, Medium e Avançado) e conta com um <strong>Motor Inteligente Anti-Conflito</strong> que verifica se outro otimizador já alterou seu sistema antes de aplicar qualquer ajuste.
+  O <strong>Klyra Optimizer+</strong> é um app <code>.exe</code> de código aberto para otimização do Windows 10 e 11 que divide as modificações em <strong>3 camadas claras de segurança</strong> (Standard, Medium e Avançado) e conta com um <strong>Motor Inteligente Anti-Conflito</strong> que verifica se outro otimizador já alterou seu sistema antes de aplicar qualquer ajuste.
 </p>
 
 </div>
@@ -23,7 +23,7 @@
    - Se a chave ou serviço já estiver otimizado (por execução anterior ou por outra ferramenta como *Chris Titus WinUtil*, *AtlasOS* ou *Platinum+*), ele exibe `[PULADO - JA ATIVO]` e evita conflitos.
    - Se ainda estiver no padrão lento do Windows, ele aplica a melhoria e contabiliza no relatório final.
 
-2. **🔍 Scanner Pré-Execução Integrado (`Opção [5]`)**:
+2. **🔍 Scanner Pré-Execução Integrado**:
    Permite auditar o sistema antes de rodar qualquer otimização, detectando bloqueios de IFEO, estado de serviços de telemetria, HAGS, `Win32PrioritySeparation` e travas do Windows Update.
 
 3. **🎨 Interface ANSI com Paleta RGB Gradiente**:
@@ -44,16 +44,15 @@
 ## 🛠️ Ferramentas Open Source Integradas (`Opção [4]`)
 
 O Klyra Optimizer+ inclui um menu rápido para executar ferramentas consagradas da comunidade sem sair do terminal:
-- **Chris Titus Tech WinUtil** (via PowerShell oficial)
 - **BleachBit** (verificação e instalação automatizada via `winget`)
-
+- Entre outros
 ---
 
 ## 📦 Como Baixar e Usar
 
-1. Baixe a versão mais recente do arquivo **`KlyraOptimizer+.bat`** na aba [Releases](https://github.com) ou diretamente pelo repositório.
-2. Execute o arquivo **`KlyraOptimizer+.bat`** (ele solicitará privilégios de Administrador automaticamente via UAC).
-3. *(Opcional)* Pressione **`[5]`** para rodar o **Scanner de Conflitos** e verificar o estado atual do seu Windows.
+1. Baixe a versão mais recente do arquivo **`KlyraOptimizer+.exe`** na aba [Releases](https://github.com) ou diretamente pelo repositório.
+2. Execute o arquivo **`KlyraOptimizer+.exe`** (ele solicitará privilégios de Administrador automaticamente via UAC).
+3. *Prossiga com o instalador*
 4. Escolha entre os modos **`[1] Standard`**, **`[2] Medium`** ou **`[3] Avançado`**, configure suas preferências de *CompactOS*, *Windows Update*, *Microsoft Store* e *Bluetooth*, e aguarde a conclusão!
 
 ---
