@@ -5,7 +5,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-7376F6.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 [![Platform: Windows 10 & 11](https://img.shields.io/badge/Windows-10%20%7C%2011%20(x64)-4B90F5?style=for-the-badge&logo=windows)](https://github.com)
-[![Version: V1.4.1](https://shields.io)](https://github.com)
+[![Version: V1.4.1](https://shields.io)](https://github.com/KlyraOptimizer)
 [![Author: @KlyraOptimizer](https://shields.io)](https://github.com)
 
 <p align="center">
