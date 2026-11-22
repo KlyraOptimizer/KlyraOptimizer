@@ -1,15 +1,15 @@
 <div align="center">
 
 # ✦ Klyra Optimizer+ V1.4.1
-### *Open Source Windows Optimizer • Gemini RGB & Smart Anti-Conflict Engine*
+### *Open Source Windows Optimizer • RGB Theme & Smart Anti-Conflict Engine*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-7376F6.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
-[![Platform: Windows 10 & 11](https://img.shields.io/badge/Windows-10%20%7C%2011%20(x64)-4B90F5?style=for-the-badge&logo=windows)](https://github.com/AzureOptimizer/AzureOptimizer)
-[![Version: V1.1](https://img.shields.io/badge/Release-V1.1%20Anti--Conflict-D96570?style=for-the-badge)](https://github.com/AzureOptimizer/AzureOptimizer)
-[![Author: @AzureOptimizer](https://img.shields.io/badge/Criador-@AzureOptimizer-F48F68?style=for-the-badge&logo=github)](https://github.com/AzureOptimizer)
+[![Platform: Windows 10 & 11](https://img.shields.io/badge/Windows-10%20%7C%2011%20(x64)-4B90F5?style=for-the-badge&logo=windows)](https://github.com)
+[![Version: V1.4.1](https://shields.io)](https://github.com)
+[![Author: @KlyraOptimizer](https://shields.io)](https://github.com)
 
 <p align="center">
-  O <strong>Azure Optimizer+</strong> é um script <code>.bat</code> de código aberto para otimização do Windows 10 e 11 que divide as modificações em <strong>3 camadas claras de segurança</strong> (Standard, Medium e Avançado) e conta com um <strong>Motor Inteligente Anti-Conflito</strong> que verifica se outro otimizador já alterou seu sistema antes de aplicar qualquer ajuste.
+  O <strong>Klyra Optimizer+</strong> é um script <code>.bat</code> de código aberto para otimização do Windows 10 e 11 que divide as modificações em <strong>3 camadas claras de segurança</strong> (Standard, Medium e Avançado) e conta com um <strong>Motor Inteligente Anti-Conflito</strong> que verifica se outro otimizador já alterou seu sistema antes de aplicar qualquer ajuste.
 </p>
 
 </div>
@@ -19,14 +19,14 @@
 ## ✨ Diferenciais do Projeto
 
 1. **🛡️ Motor Anti-Conflito (`:SAFE_REG`, `:SAFE_SC`, `:SAFE_BCD`)**:
-   Diferente de scripts tradicionais que forçam comandos `reg add /f` e `sc config` cegamente, o Azure Optimizer+ consulta o estado atual do Windows antes de cada passo:
+   Diferente de scripts tradicionais que forçam comandos `reg add /f` e `sc config` cegamente, o Klyra Optimizer+ consulta o estado atual do Windows antes de cada passo:
    - Se a chave ou serviço já estiver otimizado (por execução anterior ou por outra ferramenta como *Chris Titus WinUtil*, *AtlasOS* ou *Platinum+*), ele exibe `[PULADO - JA ATIVO]` e evita conflitos.
    - Se ainda estiver no padrão lento do Windows, ele aplica a melhoria e contabiliza no relatório final.
 
 2. **🔍 Scanner Pré-Execução Integrado (`Opção [5]`)**:
    Permite auditar o sistema antes de rodar qualquer otimização, detectando bloqueios de IFEO, estado de serviços de telemetria, HAGS, `Win32PrioritySeparation` e travas do Windows Update.
 
-3. **🎨 Interface ANSI com Paleta RGB do Google Gemini**:
+3. **🎨 Interface ANSI com Paleta RGB Gradiente**:
    Visual de terminal moderno com degradê em cores reais (TrueColor ANSI: Azul Royal $\rightarrow$ Índigo $\rightarrow$ Roxo $\rightarrow$ Rosa/Coral).
 
 ---
@@ -43,7 +43,7 @@
 
 ## 🛠️ Ferramentas Open Source Integradas (`Opção [4]`)
 
-O Azure Optimizer+ inclui um menu rápido para executar ferramentas consagradas da comunidade sem sair do terminal:
+O Klyra Optimizer+ inclui um menu rápido para executar ferramentas consagradas da comunidade sem sair do terminal:
 - **Chris Titus Tech WinUtil** (via PowerShell oficial)
 - **BleachBit** (verificação e instalação automatizada via `winget`)
 
@@ -51,8 +51,8 @@ O Azure Optimizer+ inclui um menu rápido para executar ferramentas consagradas 
 
 ## 📦 Como Baixar e Usar
 
-1. Baixe a versão mais recente do arquivo **`AzureOptimizer+.bat`** na aba [Releases](https://github.com/AzureOptimizer/AzureOptimizer) ou diretamente pelo repositório.
-2. Execute o arquivo **`AzureOptimizer+.bat`** (ele solicitará privilégios de Administrador automaticamente via UAC).
+1. Baixe a versão mais recente do arquivo **`KlyraOptimizer+.bat`** na aba [Releases](https://github.com) ou diretamente pelo repositório.
+2. Execute o arquivo **`KlyraOptimizer+.bat`** (ele solicitará privilégios de Administrador automaticamente via UAC).
 3. *(Opcional)* Pressione **`[5]`** para rodar o **Scanner de Conflitos** e verificar o estado atual do seu Windows.
 4. Escolha entre os modos **`[1] Standard`**, **`[2] Medium`** ou **`[3] Avançado`**, configure suas preferências de *CompactOS*, *Windows Update*, *Microsoft Store* e *Bluetooth*, e aguarde a conclusão!
 
@@ -60,13 +60,14 @@ O Azure Optimizer+ inclui um menu rápido para executar ferramentas consagradas 
 
 ## 🤝 Créditos e Referências
 
-- **Criador & Mantenedor**: [@AzureOptimizer](https://github.com/AzureOptimizer)
-- **Repositório Oficial**: [github.com/AzureOptimizer/AzureOptimizer](https://github.com/AzureOptimizer/AzureOptimizer)
+- **Criador & Mantenedor**: [@KlyraOptimizer](https://github.com)
+- **Repositório Oficial**: [://github.com](https://github.com)
 - **Inspiração & Referência Técnica**: *Platinum+ Optimizer V9.5* (`@STEFANO83223` & `@Aledect`)
 - **Utilitários Open Source**: *Chris Titus Tech WinUtil* & *BleachBit*
 
 ---
 
 <div align="center">
-  <sub>© 2026 Azure Optimizer+. Distribuído sob a licença MIT.</sub>
+  <sub>© 2026 Klyra Optimizer+. Distribuído sob a licença MIT.</sub><br>
+  <sub>Este é um projeto independente e de código aberto, sem qualquer afiliação, endosso ou vínculo com a Microsoft Corporation.</sub>
 </div>
