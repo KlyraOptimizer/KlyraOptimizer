@@ -60,7 +60,7 @@ O Klyra Optimizer+ inclui um menu rápido para executar ferramentas consagradas 
 ## 🤝 Créditos e Referências
 
 - **Criador & Mantenedor**: [@KlyraOptimizer](https://github.com)
-- **Repositório Oficial**: [://github.com](https://github.com)
+- **Repositório Oficial**: [://github.com/KlyraOptimizer/KlyraOptimizer](https://github.com/KlyraOptimizer/KlyraOptimizer)
 - **Inspiração & Referência Técnica**: *Platinum+ Optimizer V9.5* (`@STEFANO83223` & `@Aledect`)
 - **Utilitários Open Source**: *Chris Titus Tech WinUtil* & *BleachBit*
 
