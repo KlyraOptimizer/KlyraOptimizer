@@ -1,6 +1,6 @@
 <div align="center">
 
-# ✦ Klyra Optimizer+ V1.6.1
+# ✦ Klyra Optimizer+ V1.5.1
 ### *Open Source Windows Optimizer • RGB Theme & Smart Anti-Conflict Engine*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-7376F6.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
