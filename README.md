@@ -41,7 +41,7 @@
 
 ---
 
-## 🛠️ Ferramentas Open Source Integradas (`Opção [4]`)
+## 🛠️ Ferramentas Open Source Integradas
 
 O Klyra Optimizer+ inclui um menu rápido para executar ferramentas consagradas da comunidade sem sair do terminal:
 - **BleachBit** (verificação e instalação automatizada via `winget`)
@@ -67,6 +67,6 @@ O Klyra Optimizer+ inclui um menu rápido para executar ferramentas consagradas 
 ---
 
 <div align="center">
-  <sub>© 2026 Klyra Optimizer+. Distribuído sob a licença MIT.</sub><br>
+  <sub>© 2026 Klyra Optimizer+. Distribuído sob a licença [MIT](https://opensource.org/license/mit).
   <sub>Este é um projeto independente e de código aberto, sem qualquer afiliação, endosso ou vínculo com a Microsoft Corporation.</sub>
 </div>
