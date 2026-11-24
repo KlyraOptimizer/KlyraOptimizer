@@ -1,0 +1,262 @@
+﻿<UserControl x:Class="KlyraOptimizer.Views.DashboardPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="clr-namespace:KlyraOptimizer.Views"
+             Background="Transparent"
+             FontFamily="{StaticResource Font.Ui}">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="36,16,36,36" MaxWidth="1100" HorizontalAlignment="Left">
+
+            <TextBlock Text="Início" Style="{StaticResource Text.PageTitle}" />
+            <TextBlock x:Name="SubtitleText"
+                       Style="{StaticResource Text.PageSubtitle}"
+                       Text="Visão geral do sistema e acesso rápido às configurações de desempenho." />
+
+            <!-- ===================== CABECALHO ESTILO CONFIGURACOES DO WINDOWS 10 ===================== -->
+            <Border Padding="24,22" Margin="0,20,0,0"
+                    Background="{DynamicResource App.HeroGradient}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Width="56" Height="56" Background="#26FFFFFF" VerticalAlignment="Center" Margin="0,0,20,0">
+                        <TextBlock Text="&#xE945;" FontFamily="{StaticResource Font.Icons}" FontSize="28"
+                                   Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="KLYRA OPTIMIZER • WINDOWS 10 FLUENT"
+                                   FontSize="11" FontWeight="SemiBold" Foreground="#CCFFFFFF" />
+                        <TextBlock Text="Seu Windows mais rápido, responsivo e livre de telemetria"
+                                   FontSize="22" FontWeight="Light"
+                                   Foreground="White"
+                                   TextWrapping="Wrap"
+                                   Margin="0,4,0,6" />
+                        <TextBlock x:Name="HeroDescription"
+                                   FontSize="13"
+                                   Foreground="#E0FFFFFF"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="640"
+                                   HorizontalAlignment="Left"
+                                   Text="Verificação automática de conflitos, ponto de restauração e reversão completa. Todos os registros são salvos silenciosamente em segundo plano." />
+
+                        <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                            <Border Background="#2BFFFFFF" Padding="10,3" Margin="0,0,8,0">
+                                <TextBlock x:Name="HeroOsChip" Text="Windows"
+                                           FontSize="11" FontWeight="SemiBold" Foreground="White" />
+                            </Border>
+                            <Border Background="#2BFFFFFF" Padding="10,3" Margin="0,0,8,0">
+                                <TextBlock x:Name="HeroModeChip" Text="Modo: nenhum"
+                                           FontSize="11" FontWeight="SemiBold" Foreground="White" />
+                            </Border>
+                            <Border x:Name="HeroAdminChip" Background="#2BFFFFFF" Padding="10,3">
+                                <TextBlock x:Name="HeroAdminText" Text="Administrador"
+                                           FontSize="11" FontWeight="SemiBold" Foreground="White" />
+                            </Border>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Button Grid.Column="2"
+                            Style="{StaticResource Btn.Base}"
+                            Background="White"
+                            Foreground="#FF005A9E"
+                            FontWeight="SemiBold"
+                            Height="36"
+                            Padding="22,0"
+                            VerticalAlignment="Center"
+                            Margin="20,0,0,0"
+                            Content="Otimizar agora"
+                            Click="GoOptimizer_Click" />
+                </Grid>
+            </Border>
+
+            <!-- ===================== STATUS DO SISTEMA (TILES RETOS WIN10) ===================== -->
+            <TextBlock Text="Estado do computador" Style="{StaticResource Text.Subheader}" Margin="0,26,0,12" />
+
+            <UniformGrid Columns="2">
+                <Border Style="{StaticResource Card}" Margin="0,0,10,10">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE770;" Style="{StaticResource Icon}" FontSize="26"
+                                   Foreground="{DynamicResource App.Accent}" VerticalAlignment="Top" Margin="0,2,16,0" />
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="SISTEMA OPERACIONAL" Style="{StaticResource Text.Section}" Margin="0,0,0,3" />
+                            <TextBlock x:Name="SystemValue" Text="—"
+                                       FontSize="16" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource App.Text}"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock x:Name="SystemDetail" Text="—" Style="{StaticResource Text.Caption}" Margin="0,3,0,0" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xEC4A;" Style="{StaticResource Icon}" FontSize="26"
+                                   Foreground="{DynamicResource App.Accent}" VerticalAlignment="Top" Margin="0,2,16,0" />
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="PERFIL DE OTIMIZAÇÃO ATIVO" Style="{StaticResource Text.Section}" Margin="0,0,0,3" />
+                            <TextBlock x:Name="ModeValue" Text="—"
+                                       FontSize="16" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource App.Text}" />
+                            <TextBlock x:Name="ModeDetail" Text="—" Style="{StaticResource Text.Caption}" Margin="0,3,0,0" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource Card}" Margin="0,0,10,0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE719;" Style="{StaticResource Icon}" FontSize="26"
+                                   Foreground="{DynamicResource App.Accent}" VerticalAlignment="Top" Margin="0,2,16,0" />
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="INSTALADOR DE PACOTES (WINGET)" Style="{StaticResource Text.Section}" Margin="0,0,0,3" />
+                            <TextBlock x:Name="WingetValue" Text="—"
+                                       FontSize="16" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource App.Text}" />
+                            <TextBlock x:Name="WingetDetail" Text="—" Style="{StaticResource Text.Caption}" Margin="0,3,0,0" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource Card}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xEA18;" Style="{StaticResource Icon}" FontSize="26"
+                                   Foreground="{DynamicResource App.Accent}" VerticalAlignment="Top" Margin="0,2,16,0" />
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="PROTEÇÃO E RESTAURAÇÃO" Style="{StaticResource Text.Section}" Margin="0,0,0,3" />
+                            <TextBlock x:Name="RestoreValue" Text="—"
+                                       FontSize="16" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource App.Text}" />
+                            <TextBlock x:Name="RestoreDetail" Text="—" Style="{StaticResource Text.Caption}" Margin="0,3,0,0" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </UniformGrid>
+
+            <!-- ===================== CATEGORIAS ESTILO WINDOWS 10 SETTINGS ===================== -->
+            <Grid Margin="0,28,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Categorias e ações rápidas" Style="{StaticResource Text.Subheader}" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <views:Win10ProgressRing x:Name="ScanRing" Width="18" Height="18" Visibility="Collapsed" Margin="0,0,8,0" />
+                    <TextBlock x:Name="ScanFeedback" Style="{StaticResource Text.Caption}" VerticalAlignment="Center" />
+                </StackPanel>
+            </Grid>
+
+            <UniformGrid Columns="3">
+                <Button Style="{StaticResource Btn.Tile}" Margin="0,0,10,10" Click="GoOptimizer_Click">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE945;" Style="{StaticResource Icon}" FontSize="24"
+                                   VerticalAlignment="Top" Margin="0,2,14,0" Foreground="{DynamicResource App.Accent}" />
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Otimizador" Style="{StaticResource Text.CardTitle}" />
+                            <TextBlock Text="Perfis Standard, Medium e Avançado" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                        </StackPanel>
+                    </Grid>
+                </Button>
+
+                <Button Style="{StaticResource Btn.Tile}" Margin="0,0,10,10" Click="GoTool_Click">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE90F;" Style="{StaticResource Icon}" FontSize="24"
+                                   VerticalAlignment="Top" Margin="0,2,14,0" Foreground="{DynamicResource App.Accent}" />
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Klyra Tool" Style="{StaticResource Text.CardTitle}" />
+                            <TextBlock Text="Alternar recursos individuais ao vivo" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                        </StackPanel>
+                    </Grid>
+                </Button>
+
+                <Button Style="{StaticResource Btn.Tile}" Margin="0,0,0,10" Click="GoStore_Click">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE719;" Style="{StaticResource Icon}" FontSize="24"
+                                   VerticalAlignment="Top" Margin="0,2,14,0" Foreground="{DynamicResource App.Accent}" />
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Microsoft Store" Style="{StaticResource Text.CardTitle}" />
+                            <TextBlock Text="Instalar apps sem conta Microsoft" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                        </StackPanel>
+                    </Grid>
+                </Button>
+
+                <Button Style="{StaticResource Btn.Tile}" Margin="0,0,10,0" Click="Scan_Click">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE721;" Style="{StaticResource Icon}" FontSize="24"
+                                   VerticalAlignment="Top" Margin="0,2,14,0" Foreground="{DynamicResource App.Accent}" />
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Scanner de conflitos" Style="{StaticResource Text.CardTitle}" />
+                            <TextBlock Text="Verificar modificações existentes" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                        </StackPanel>
+                    </Grid>
+                </Button>
+
+                <Button Style="{StaticResource Btn.Tile}" Margin="0,0,10,0" Click="GoRestore_Click">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE81C;" Style="{StaticResource Icon}" FontSize="24"
+                                   VerticalAlignment="Top" Margin="0,2,14,0" Foreground="{DynamicResource App.Accent}" />
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Restauração" Style="{StaticResource Text.CardTitle}" />
+                            <TextBlock Text="Pontos de restauração e reversão" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                        </StackPanel>
+                    </Grid>
+                </Button>
+
+                <Button Style="{StaticResource Btn.Tile}" Margin="0" Click="GoSettings_Click">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="&#xE713;" Style="{StaticResource Icon}" FontSize="24"
+                                   VerticalAlignment="Top" Margin="0,2,14,0" Foreground="{DynamicResource App.Accent}" />
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Configurações" Style="{StaticResource Text.CardTitle}" />
+                            <TextBlock Text="Tema, diagnóstico e pasta de logs" Style="{StaticResource Text.Caption}" Margin="0,2,0,0" />
+                        </StackPanel>
+                    </Grid>
+                </Button>
+            </UniformGrid>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

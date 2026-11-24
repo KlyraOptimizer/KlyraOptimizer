@@ -1,0 +1,252 @@
+﻿<UserControl x:Class="KlyraOptimizer.Views.OptimizerPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="clr-namespace:KlyraOptimizer.Views"
+             Background="Transparent"
+             FontFamily="{StaticResource Font.Ui}">
+
+    <Grid>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="36,16,36,36" MaxWidth="1100" HorizontalAlignment="Left">
+
+                <TextBlock Text="Otimizador" Style="{StaticResource Text.PageTitle}" />
+                <TextBlock Style="{StaticResource Text.PageSubtitle}"
+                           Text="Escolha o perfil de desempenho, ajuste as preferências e aplique com um clique. Toda a execução roda em segundo plano e grava o relatório na pasta de logs." />
+
+                <!-- ===================== MODOS ===================== -->
+                <TextBlock Text="Perfil de otimização" Style="{StaticResource Text.Subheader}" Margin="0,24,0,12" />
+
+                <UniformGrid Columns="3">
+                    <RadioButton x:Name="ModeStandard" GroupName="Mode" Style="{StaticResource ModeCard}" IsChecked="True">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE945;" Style="{StaticResource Icon}" FontSize="18"
+                                           Foreground="{DynamicResource App.Accent}" />
+                                <TextBlock Text="Standard" Style="{StaticResource Text.CardTitle}" FontWeight="SemiBold"
+                                           Margin="10,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource Text.Caption}" Margin="0,10,0,0"
+                                       Text="Leve e seguro. Telemetria, ID de anúncio, Copilot, GameDVR, MMCSS, NTFS, Fast Startup e limpeza de temporários." />
+                            <Border Style="{StaticResource Chip}" HorizontalAlignment="Left" Margin="0,14,0,0">
+                                <TextBlock Text="Risco baixo" Style="{StaticResource Chip.Text}"
+                                           Foreground="{DynamicResource App.SuccessText}" />
+                            </Border>
+                        </StackPanel>
+                    </RadioButton>
+
+                    <RadioButton x:Name="ModeMedium" GroupName="Mode" Style="{StaticResource ModeCard}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xEC4A;" Style="{StaticResource Icon}" FontSize="18"
+                                           Foreground="{DynamicResource App.Accent}" />
+                                <TextBlock Text="Medium" Style="{StaticResource Text.CardTitle}" FontWeight="SemiBold"
+                                           Margin="10,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource Text.Caption}" Margin="0,10,0,0"
+                                       Text="Inclui o Standard + ajustes de rede TCP, 18 serviços em segundo plano, remoção de bloatware AppX e bloqueio IFEO." />
+                            <Border Style="{StaticResource Chip}" HorizontalAlignment="Left" Margin="0,14,0,0">
+                                <TextBlock Text="Equilibrado" Style="{StaticResource Chip.Text}"
+                                           Foreground="{DynamicResource App.Warning}" />
+                            </Border>
+                        </StackPanel>
+                    </RadioButton>
+
+                    <RadioButton x:Name="ModeAdvanced" GroupName="Mode" Style="{StaticResource ModeCard}" Margin="0">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE7BA;" Style="{StaticResource Icon}" FontSize="18"
+                                           Foreground="{DynamicResource App.Accent}" />
+                                <TextBlock Text="Avançado" Style="{StaticResource Text.CardTitle}" FontWeight="SemiBold"
+                                           Margin="10,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource Text.Caption}" Margin="0,10,0,0"
+                                       Text="Inclui o Medium + kernel na RAM, PoolUsage, BCD (x2APIC/TSC), HAGS, TDR, MSI Mode das GPUs e desativação de VBS/HVCI." />
+                            <Border Style="{StaticResource Chip}" HorizontalAlignment="Left" Margin="0,14,0,0">
+                                <TextBlock Text="Extremo" Style="{StaticResource Chip.Text}"
+                                           Foreground="{DynamicResource App.Danger}" />
+                            </Border>
+                        </StackPanel>
+                    </RadioButton>
+                </UniformGrid>
+
+                <!-- ===================== OPCOES ===================== -->
+                <TextBlock Text="Opções de configuração" Style="{StaticResource Text.Subheader}" Margin="0,28,0,12" />
+
+                <Border Style="{StaticResource Card}">
+                    <StackPanel>
+
+                        <!-- Compressao -->
+                        <Grid Margin="0,0,0,14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Text="Compressão do sistema (CompactOS)" Style="{StaticResource Text.CardTitle}" />
+                                <TextBlock Style="{StaticResource Text.Caption}" Margin="0,2,0,0"
+                                           Text="Comprimir economiza espaço no SSD; descomprimir libera ciclos de CPU." />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <RadioButton x:Name="CompactSkip" GroupName="Compact" Style="{StaticResource Pill.Radio}"
+                                             Content="Manter atual" IsChecked="True" />
+                                <RadioButton x:Name="CompactNever" GroupName="Compact" Style="{StaticResource Pill.Radio}"
+                                             Content="Descomprimir" />
+                                <RadioButton x:Name="CompactAlways" GroupName="Compact" Style="{StaticResource Pill.Radio}"
+                                             Content="Comprimir" Margin="0" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Border Style="{StaticResource Divider}" Margin="0,0,0,14" />
+
+                        <!-- Windows Update -->
+                        <Grid Margin="0,0,0,14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Text="Windows Update" Style="{StaticResource Text.CardTitle}" />
+                                <TextBlock Style="{StaticResource Text.Caption}" Margin="0,2,0,0"
+                                           Text="Manter ativo preserva a proteção contra substituição automática de drivers." />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <RadioButton x:Name="UpdateKeep" GroupName="Update" Style="{StaticResource Pill.Radio}"
+                                             Content="Manter ativo" IsChecked="True" />
+                                <RadioButton x:Name="UpdateDisable" GroupName="Update" Style="{StaticResource Pill.Radio}"
+                                             Content="Desativar" Margin="0" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Border Style="{StaticResource Divider}" Margin="0,0,0,14" />
+
+                        <!-- Microsoft Store -->
+                        <Grid Margin="0,0,0,14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Text="Microsoft Store oficial" Style="{StaticResource Text.CardTitle}" />
+                                <TextBlock Style="{StaticResource Text.Caption}" Margin="0,2,0,0"
+                                           Text="A Loja integrada do Klyra Optimizer instala aplicativos sem conta Microsoft." />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <RadioButton x:Name="StoreKeep" GroupName="Store" Style="{StaticResource Pill.Radio}"
+                                             Content="Manter intacta" IsChecked="True" />
+                                <RadioButton x:Name="StoreServices" GroupName="Store" Style="{StaticResource Pill.Radio}"
+                                             Content="Só os serviços" />
+                                <RadioButton x:Name="StoreRemove" GroupName="Store" Style="{StaticResource Pill.Radio}"
+                                             Content="Remover app" Margin="0" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Border Style="{StaticResource Divider}" Margin="0,0,0,14" />
+
+                        <!-- Bluetooth -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Text="Serviços de Bluetooth" Style="{StaticResource Text.CardTitle}" />
+                                <TextBlock Style="{StaticResource Text.Caption}" Margin="0,2,0,0"
+                                           Text="Desative se não utiliza dispositivos Bluetooth para economizar memória." />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <RadioButton x:Name="BluetoothKeep" GroupName="Bluetooth" Style="{StaticResource Pill.Radio}"
+                                             Content="Manter ativo" IsChecked="True" />
+                                <RadioButton x:Name="BluetoothDisable" GroupName="Bluetooth" Style="{StaticResource Pill.Radio}"
+                                             Content="Desativar" Margin="0" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Border Style="{StaticResource Divider}" Margin="0,16,0,14" />
+
+                        <CheckBox x:Name="RestoreCheck" Style="{StaticResource Check.Fluent}" IsChecked="True"
+                                  Content="Criar Ponto de Restauração automaticamente antes de aplicar" />
+                    </StackPanel>
+                </Border>
+
+                <!-- ===================== EXECUCAO EM SEGUNDO PLANO ===================== -->
+                <Border Style="{StaticResource Card}" Margin="0,16,0,0">
+                    <StackPanel>
+                        <views:Win10ProgressBar x:Name="BusyBar" Height="6" Visibility="Collapsed" Margin="0,0,0,10" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                                <TextBlock Text="Execução em segundo plano" Style="{StaticResource Text.CardTitle}" FontWeight="SemiBold" />
+                                <TextBlock x:Name="StatusText" Style="{StaticResource Text.Caption}" Margin="0,3,0,0"
+                                           Text="Pronto para otimizar." TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Border Style="{StaticResource Chip}" Margin="0,0,6,0">
+                                    <TextBlock x:Name="AppliedChip" Text="Aplicados 0" Style="{StaticResource Chip.Text}" />
+                                </Border>
+                                <Border Style="{StaticResource Chip}" Margin="0,0,6,0">
+                                    <TextBlock x:Name="SkippedChip" Text="Pulados 0" Style="{StaticResource Chip.Text}" />
+                                </Border>
+                                <Border Style="{StaticResource Chip}" Margin="0,0,14,0">
+                                    <TextBlock x:Name="FailedChip" Text="Erros 0" Style="{StaticResource Chip.Text}" />
+                                </Border>
+
+                                <views:Win10ProgressRing x:Name="BusyRing" Width="22" Height="22"
+                                                         Visibility="Collapsed" Margin="0,0,12,0" />
+
+                                <Button x:Name="ApplyButton" Content="Aplicar otimização" Style="{StaticResource Btn.Accent}"
+                                        Height="34" Padding="20,0" Click="Apply_Click" />
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- ===================== CONTENT DIALOG WIN10: CONFIRMACAO ===================== -->
+        <Grid x:Name="ConfirmOverlay" Background="#88000000" Visibility="Collapsed">
+            <Border Style="{StaticResource Card.Solid}" Width="540" Padding="24,20,24,24"
+                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                <StackPanel>
+                    <TextBlock Text="Confirmar otimização"
+                               FontSize="20" FontWeight="Light" Foreground="{DynamicResource App.Text}" />
+                    <TextBlock x:Name="ConfirmSummary" Style="{StaticResource Text.Body}" Margin="0,12,0,0" />
+                    <Border Style="{StaticResource Divider}" />
+                    <TextBlock Style="{StaticResource Text.Caption}"
+                               Text="As chaves já otimizadas serão detectadas e puladas automaticamente. O relatório completo será gravado na pasta de logs." />
+                    <UniformGrid Columns="2" Margin="0,22,0,0">
+                        <Button Content="Aplicar agora" Style="{StaticResource Btn.Accent}" Margin="0,0,4,0"
+                                Click="ConfirmApply_Click" />
+                        <Button Content="Cancelar" Style="{StaticResource Btn.Standard}" Margin="4,0,0,0"
+                                Click="CancelConfirm_Click" />
+                    </UniformGrid>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- ===================== CONTENT DIALOG WIN10: REINICIAR ===================== -->
+        <Grid x:Name="RebootOverlay" Background="#88000000" Visibility="Collapsed">
+            <Border Style="{StaticResource Card.Solid}" Width="520" Padding="24,20,24,24"
+                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                <StackPanel>
+                    <TextBlock Text="Otimização concluída"
+                               FontSize="20" FontWeight="Light" Foreground="{DynamicResource App.Text}" />
+                    <TextBlock x:Name="RebootSummary" Style="{StaticResource Text.Body}" Margin="0,12,0,0" />
+                    <TextBlock Style="{StaticResource Text.Caption}" Margin="0,8,0,0"
+                               Text="Recomendamos reiniciar o computador para efetivar os ajustes de kernel, BCD e GPU." />
+                    <UniformGrid Columns="2" Margin="0,22,0,0">
+                        <Button Content="Reiniciar agora" Style="{StaticResource Btn.Accent}" Margin="0,0,4,0"
+                                Click="RebootNow_Click" />
+                        <Button Content="Reiniciar depois" Style="{StaticResource Btn.Standard}" Margin="4,0,0,0"
+                                Click="RebootLater_Click" />
+                    </UniformGrid>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

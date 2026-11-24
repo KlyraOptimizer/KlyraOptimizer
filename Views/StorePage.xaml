@@ -1,0 +1,583 @@
+﻿<UserControl x:Class="KlyraOptimizer.Views.StorePage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="clr-namespace:KlyraOptimizer.Views"
+             Background="Transparent"
+             FontFamily="{StaticResource Font.Ui}">
+
+    <UserControl.Resources>
+        <!-- Cartao vertical autentico da Microsoft Store do Windows 10 (156 x 216, cantos retos) -->
+        <DataTemplate x:Key="Win10StoreCardTemplate">
+            <Button Style="{StaticResource Btn.Tile}"
+                    Width="156" Height="218"
+                    Padding="0"
+                    Margin="0,0,12,12"
+                    HorizontalContentAlignment="Stretch"
+                    VerticalContentAlignment="Stretch"
+                    Tag="{Binding}"
+                    Click="Card_Click">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="124" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Area do icone/tile da marca -->
+                    <Border Grid.Row="0" Background="{DynamicResource App.Layer}">
+                        <Grid>
+                            <Border Background="{Binding TileBackground}" Opacity="0.92" />
+                            <Border Width="72" Height="72"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center">
+                                <Grid>
+                                    <TextBlock x:Name="FallbackInitial"
+                                               Text="{Binding Initial}"
+                                               FontSize="28" FontWeight="Light"
+                                               Foreground="{DynamicResource App.Text}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    <Image x:Name="LogoImg"
+                                           Source="{Binding Logo}"
+                                           Width="68" Height="68"
+                                           Stretch="Uniform"
+                                           RenderOptions.BitmapScalingMode="HighQuality"
+                                           Visibility="Collapsed" />
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </Border>
+
+                    <!-- Metadados na base do cartao (igual ao Windows 10 Store) -->
+                    <Grid Grid.Row="1" Margin="10,8,10,8">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0"
+                                   Text="{Binding Title}"
+                                   FontSize="13"
+                                   FontWeight="Normal"
+                                   Foreground="{DynamicResource App.Text}"
+                                   TextWrapping="Wrap"
+                                   MaxHeight="36"
+                                   TextTrimming="CharacterEllipsis"
+                                   VerticalAlignment="Top" />
+
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,2,0,2">
+                            <TextBlock Text="{Binding StarsText}"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource App.TextSecondary}" />
+                            <TextBlock Text="{Binding RatingText}"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource App.TextTertiary}"
+                                       Margin="5,0,0,0" />
+                        </StackPanel>
+
+                        <TextBlock Grid.Row="2"
+                                   Text="{Binding PriceLabel}"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource App.TextSecondary}" />
+                    </Grid>
+                </Grid>
+            </Button>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding HasLogo}" Value="True">
+                    <Setter TargetName="LogoImg" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="FallbackInitial" Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- ===================== BARRA DE PROGRESSO WIN10 (5 BOLINHAS) ===================== -->
+        <views:Win10ProgressBar x:Name="TopProgress" Grid.Row="0" Height="5" Visibility="Collapsed" />
+
+        <!-- ===================== CABECALHO PIVOT DA LOJA DO WINDOWS 10 ===================== -->
+        <Border Grid.Row="1"
+                Background="{DynamicResource App.Layer}"
+                BorderBrush="{DynamicResource App.Divider}"
+                BorderThickness="0,0,0,1"
+                Padding="32,10,32,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Abas Pivot classicas da Microsoft Store Win10 -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Bottom">
+                    <RadioButton x:Name="TabHome" Content="Página Inicial" GroupName="StorePivot"
+                                 Style="{StaticResource Pivot.Tab}" IsChecked="True" Tag="home" Click="Pivot_Click" />
+                    <RadioButton x:Name="TabApps" Content="Aplicativos" GroupName="StorePivot"
+                                 Style="{StaticResource Pivot.Tab}" Tag="apps" Click="Pivot_Click" />
+                    <RadioButton x:Name="TabGaming" Content="Jogos" GroupName="StorePivot"
+                                 Style="{StaticResource Pivot.Tab}" Tag="games" Click="Pivot_Click" />
+                    <RadioButton x:Name="TabProd" Content="Produtividade" GroupName="StorePivot"
+                                 Style="{StaticResource Pivot.Tab}" Tag="productivity" Click="Pivot_Click" />
+                    <RadioButton x:Name="TabDev" Content="Desenvolvedor" GroupName="StorePivot"
+                                 Style="{StaticResource Pivot.Tab}" Margin="0" Tag="dev" Click="Pivot_Click" />
+                </StackPanel>
+
+                <!-- Caixa de pesquisa quadrada com lupa embutida (canto superior direito como na Win10 Store) -->
+                <Grid Grid.Column="2" Width="310" VerticalAlignment="Center" Margin="16,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="34" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="SearchBox"
+                             Grid.Column="0" Grid.ColumnSpan="2"
+                             Height="32"
+                             Padding="10,4,36,4"
+                             Style="{StaticResource Input.Win10}"
+                             Tag="Pesquisar"
+                             KeyDown="SearchBox_KeyDown" />
+                    <Button Grid.Column="1"
+                            Width="32" Height="28"
+                            Margin="0,0,2,0"
+                            Style="{StaticResource Btn.Subtle}"
+                            Padding="0"
+                            ToolTip="Pesquisar na Microsoft Store"
+                            Click="Search_Click">
+                        <TextBlock Text="&#xE721;" FontFamily="{StaticResource Font.Icons}" FontSize="13"
+                                   Foreground="{DynamicResource App.TextSecondary}" />
+                    </Button>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- ===================== AVISO DO WINGET (QUANDO AUSENTE) ===================== -->
+        <Border x:Name="WingetWarn" Grid.Row="2" Style="{StaticResource Card.Tight}" Margin="32,12,32,0"
+                Background="{DynamicResource App.WarningSoft}" BorderBrush="{DynamicResource App.Warning}" Visibility="Collapsed">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="&#xE7BA;" Style="{StaticResource Icon}" FontSize="18"
+                           Foreground="{DynamicResource App.Warning}" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1" Margin="12,0,12,0" VerticalAlignment="Center">
+                    <TextBlock Text="App Installer (winget) não encontrado" Style="{StaticResource Text.CardTitle}" FontWeight="SemiBold" />
+                    <TextBlock x:Name="WingetWarnText" Style="{StaticResource Text.Caption}"
+                               Text="Necessário para baixar e instalar pacotes da Microsoft Store sem conta Microsoft." />
+                </StackPanel>
+                <Button x:Name="InstallWingetButton" Grid.Column="2" Content="Instalar winget"
+                        Style="{StaticResource Btn.Accent}" VerticalAlignment="Center" Click="InstallWinget_Click" />
+            </Grid>
+        </Border>
+
+        <!-- =======================================================================
+             MODO 1: VITRINE DA PAGINA INICIAL (HERO + FILEIRAS DA LOJA WIN10)
+             ======================================================================= -->
+        <ScrollViewer x:Name="ShowcaseView" Grid.Row="3"
+                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="32,20,32,36">
+
+                <!-- Banner Spotlight Hero da Microsoft Store do Windows 10 -->
+                <Border Height="276" Background="#FF141820" BorderBrush="{DynamicResource App.CardStroke}" BorderThickness="1">
+                    <Grid ClipToBounds="True">
+                        <Border Background="{DynamicResource App.HeroGradient}" Opacity="0.85" />
+                        <Image x:Name="HeroBannerImage"
+                               Stretch="UniformToFill"
+                               HorizontalAlignment="Right"
+                               VerticalAlignment="Center"
+                               Opacity="0.58"
+                               RenderOptions.BitmapScalingMode="HighQuality" />
+
+                        <!-- Mascara lateral escura como no Spotlight da Loja Win10 -->
+                        <Border>
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0.5" EndPoint="1,0.5">
+                                    <GradientStop Color="#F0101216" Offset="0" />
+                                    <GradientStop Color="#CC101216" Offset="0.46" />
+                                    <GradientStop Color="#22101216" Offset="1" />
+                                </LinearGradientBrush>
+                            </Border.Background>
+                        </Border>
+
+                        <Grid Margin="32,26,32,22">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" MaxWidth="540" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" VerticalAlignment="Bottom">
+                                <Border Background="{DynamicResource App.Accent}" HorizontalAlignment="Left" Padding="8,2" Margin="0,0,0,10">
+                                    <TextBlock x:Name="HeroBadge" Text="EM DESTAQUE • GRATUITO"
+                                               FontSize="10" FontWeight="SemiBold" Foreground="White" />
+                                </Border>
+                                <TextBlock x:Name="HeroTitle"
+                                           Text="Spotify — Músicas e Podcasts"
+                                           FontSize="30" FontWeight="Light"
+                                           Foreground="White"
+                                           TextTrimming="CharacterEllipsis" />
+                                <TextBlock x:Name="HeroSubtitle"
+                                           Text="Ouça milhões de músicas e podcasts gratuitamente, direto da Microsoft Store sem precisar entrar com conta."
+                                           FontSize="13" Foreground="#D8FFFFFF"
+                                           TextWrapping="Wrap" MaxHeight="42"
+                                           Margin="0,6,0,16" />
+
+                                <StackPanel Orientation="Horizontal">
+                                    <Button x:Name="HeroOpenButton"
+                                            Content="Ver detalhes"
+                                            Style="{StaticResource Btn.Accent}"
+                                            Height="34" Padding="22,0"
+                                            Click="HeroOpen_Click" />
+
+                                    <!-- Seletores rapidos de vitrine (1, 2, 3, 4) -->
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                                        <Button Content="1" Width="28" Height="28" Padding="0" Margin="0,0,4,0"
+                                                Style="{StaticResource Btn.Standard}" Foreground="White" Background="#33FFFFFF"
+                                                Tag="0" Click="HeroSlot_Click" />
+                                        <Button Content="2" Width="28" Height="28" Padding="0" Margin="0,0,4,0"
+                                                Style="{StaticResource Btn.Standard}" Foreground="White" Background="#33FFFFFF"
+                                                Tag="1" Click="HeroSlot_Click" />
+                                        <Button Content="3" Width="28" Height="28" Padding="0" Margin="0,0,4,0"
+                                                Style="{StaticResource Btn.Standard}" Foreground="White" Background="#33FFFFFF"
+                                                Tag="2" Click="HeroSlot_Click" />
+                                        <Button Content="4" Width="28" Height="28" Padding="0"
+                                                Style="{StaticResource Btn.Standard}" Foreground="White" Background="#33FFFFFF"
+                                                Tag="3" Click="HeroSlot_Click" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <!-- Colecao 1: Principais aplicativos gratuitos -->
+                <Grid Margin="0,28,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Principais aplicativos gratuitos" Style="{StaticResource Text.Subheader}" />
+                    <Button Grid.Column="2" Style="{StaticResource Btn.AccentText}" Height="26" Padding="8,0"
+                            Tag="apps" Click="ShowAllSection_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Mostrar tudo" FontSize="13" VerticalAlignment="Center" />
+                            <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Font.Icons}" FontSize="10"
+                                       VerticalAlignment="Center" Margin="6,1,0,0" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+
+                <ItemsControl x:Name="EssentialRow" ItemTemplate="{StaticResource Win10StoreCardTemplate}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+
+                <!-- Atalhos de categorias estilo blocos retangulares da Loja Win10 -->
+                <TextBlock Text="Explorar por categoria" Style="{StaticResource Text.Subheader}" Margin="0,20,0,12" />
+
+                <UniformGrid Columns="4" Margin="0,0,-12,8">
+                    <Button Style="{StaticResource Btn.Tile}" Height="64" Margin="0,0,12,12" Tag="Discord" Click="QuickCategory_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE8BD;" Style="{StaticResource Icon}" FontSize="20" Foreground="{DynamicResource App.Accent}" Margin="0,0,12,0" />
+                            <TextBlock Text="Comunicação e Social" Style="{StaticResource Text.CardTitle}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource Btn.Tile}" Height="64" Margin="0,0,12,12" Tag="VLC" Click="QuickCategory_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE714;" Style="{StaticResource Icon}" FontSize="20" Foreground="{DynamicResource App.Accent}" Margin="0,0,12,0" />
+                            <TextBlock Text="Foto, Áudio e Vídeo" Style="{StaticResource Text.CardTitle}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource Btn.Tile}" Height="64" Margin="0,0,12,12" Tag="7-Zip" Click="QuickCategory_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xEC7A;" Style="{StaticResource Icon}" FontSize="20" Foreground="{DynamicResource App.Accent}" Margin="0,0,12,0" />
+                            <TextBlock Text="Utilitários e Sistema" Style="{StaticResource Text.CardTitle}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{StaticResource Btn.Tile}" Height="64" Margin="0,0,12,12" Tag="Visual Studio Code" Click="QuickCategory_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE943;" Style="{StaticResource Icon}" FontSize="20" Foreground="{DynamicResource App.Accent}" Margin="0,0,12,0" />
+                            <TextBlock Text="Ferramentas Dev" Style="{StaticResource Text.CardTitle}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </UniformGrid>
+
+                <!-- Colecao 2: Produtividade, criacao e jogos -->
+                <Grid Margin="0,16,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Essenciais para Windows e produtividade" Style="{StaticResource Text.Subheader}" />
+                    <Button Grid.Column="2" Style="{StaticResource Btn.AccentText}" Height="26" Padding="8,0"
+                            Tag="productivity" Click="ShowAllSection_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Mostrar tudo" FontSize="13" VerticalAlignment="Center" />
+                            <TextBlock Text="&#xE76C;" FontFamily="{StaticResource Font.Icons}" FontSize="10"
+                                       VerticalAlignment="Center" Margin="6,1,0,0" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+
+                <ItemsControl x:Name="ProductivityRow" ItemTemplate="{StaticResource Win10StoreCardTemplate}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- =======================================================================
+             MODO 2: GRADE DE RESULTADOS DE PESQUISA / CATEGORIA
+             ======================================================================= -->
+        <ScrollViewer x:Name="ResultsView" Grid.Row="3"
+                      Visibility="Collapsed"
+                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="32,20,32,36">
+                <Grid Margin="0,0,0,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock x:Name="ResultsHeader" Text="Resultados" Style="{StaticResource Text.PageTitle}" FontSize="24" />
+                        <TextBlock x:Name="ResultsStatus" Text="Consultando catálogo..." Style="{StaticResource Text.Caption}" Margin="0,4,0,0" />
+                    </StackPanel>
+                    <Button Grid.Column="1" Style="{StaticResource Btn.Standard}" VerticalAlignment="Center"
+                            Click="BackToHome_Click">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE72B;" FontFamily="{StaticResource Font.Icons}" FontSize="11"
+                                       VerticalAlignment="Center" Margin="0,0,8,0" />
+                            <TextBlock Text="Voltar à Página Inicial" FontSize="13" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+
+                <ItemsControl x:Name="ResultsGrid" ItemTemplate="{StaticResource Win10StoreCardTemplate}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+
+                <StackPanel x:Name="EmptyResults" Visibility="Collapsed"
+                            HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,60,0,40">
+                    <TextBlock Text="&#xE721;" Style="{StaticResource Icon}" FontSize="36"
+                               Foreground="{DynamicResource App.TextTertiary}" />
+                    <TextBlock Text="Não encontramos resultados correspondentes"
+                               Style="{StaticResource Text.Subheader}" HorizontalAlignment="Center" Margin="0,14,0,4" />
+                    <TextBlock Text="Verifique a ortografia ou tente pesquisar outro termo."
+                               Style="{StaticResource Text.Caption}" HorizontalAlignment="Center" />
+                </StackPanel>
+
+                <!-- Indicador central classico da Loja do Windows 10 enquanto consulta a API -->
+                <StackPanel x:Name="ResultsLoadingPanel" Visibility="Collapsed"
+                            HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,64,0,40">
+                    <views:Win10ProgressRing Width="40" Height="40" HorizontalAlignment="Center" />
+                    <TextBlock Text="Carregando catálogo da Microsoft Store..."
+                               Style="{StaticResource Text.Caption}" HorizontalAlignment="Center" Margin="0,14,0,0" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- =======================================================================
+             MODO 3: PAGINA DE PRODUTO (PDP) IGUAL A LOJA ANTIGA DO WINDOWS 10
+             ======================================================================= -->
+        <ScrollViewer x:Name="DetailView" Grid.Row="3"
+                      Visibility="Collapsed"
+                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- Cabecalho Hero da Pagina de Produto do Windows 10 Store -->
+                <Border Grid.Row="0" Background="{DynamicResource App.Layer}"
+                        BorderBrush="{DynamicResource App.Divider}" BorderThickness="0,0,0,1">
+                    <Grid ClipToBounds="True">
+                        <Image x:Name="DetailHeroImage"
+                               Stretch="UniformToFill"
+                               MaxHeight="300"
+                               Opacity="0.18"
+                               VerticalAlignment="Center" />
+
+                        <Grid Margin="36,24,36,28" MaxWidth="1120" HorizontalAlignment="Left">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <Button Grid.Row="0"
+                                    Style="{StaticResource Btn.Subtle}"
+                                    HorizontalAlignment="Left"
+                                    Padding="8,0" Height="28" Margin="-8,0,0,16"
+                                    Click="BackFromDetail_Click">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE72B;" FontFamily="{StaticResource Font.Icons}" FontSize="12"
+                                               VerticalAlignment="Center" Margin="0,0,8,0" />
+                                    <TextBlock Text="Voltar para a Loja" FontSize="13" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+
+                            <Grid Grid.Row="1">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Tile quadrado 116x116 do produto -->
+                                <Border x:Name="DetailTileBox"
+                                        Width="116" Height="116"
+                                        Background="{DynamicResource App.Card}"
+                                        BorderBrush="{DynamicResource App.CardStroke}"
+                                        BorderThickness="1"
+                                        VerticalAlignment="Top">
+                                    <Grid>
+                                        <TextBlock x:Name="DetailInitial" Text="?" FontSize="40" FontWeight="Light"
+                                                   Foreground="{DynamicResource App.Text}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        <Image x:Name="DetailLogo" Width="88" Height="88" Stretch="Uniform"
+                                               RenderOptions.BitmapScalingMode="HighQuality"
+                                               Visibility="Collapsed" />
+                                    </Grid>
+                                </Border>
+
+                                <!-- Titulo, Editora em azul, Categoria, Avaliacao e Preco -->
+                                <StackPanel Grid.Column="1" Margin="24,0,24,0" VerticalAlignment="Center">
+                                    <TextBlock x:Name="DetailTitle"
+                                               Text="Aplicativo"
+                                               FontSize="28" FontWeight="Light"
+                                               Foreground="{DynamicResource App.Text}"
+                                               TextWrapping="Wrap" />
+
+                                    <WrapPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                        <TextBlock x:Name="DetailPublisher"
+                                                   Text="Microsoft Corporation"
+                                                   FontSize="13"
+                                                   Foreground="{DynamicResource App.AccentText}" />
+                                        <TextBlock Text="  •  " FontSize="13" Foreground="{DynamicResource App.TextTertiary}" />
+                                        <TextBlock x:Name="DetailCategory"
+                                                   Text="Aplicativo"
+                                                   FontSize="13"
+                                                   Foreground="{DynamicResource App.TextSecondary}" />
+                                    </WrapPanel>
+
+                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                        <TextBlock x:Name="DetailStars" Text="★★★★★" FontSize="14"
+                                                   Foreground="{DynamicResource App.AccentText}" VerticalAlignment="Center" />
+                                        <TextBlock x:Name="DetailRatingText" Text="4,5" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource App.Text}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                        <TextBlock x:Name="DetailRatingCount" Text="" FontSize="12"
+                                                   Foreground="{DynamicResource App.TextTertiary}" Margin="6,0,0,0" VerticalAlignment="Center" />
+                                    </StackPanel>
+
+                                    <TextBlock Text="Gratuito" FontSize="18" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource App.Text}" Margin="0,12,0,0" />
+                                </StackPanel>
+
+                                <!-- Coluna de acao "Obter / Instalar" igual ao botao azul largo da Loja Win10 -->
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Width="220">
+                                    <Button x:Name="InstallButton"
+                                            Content="Obter"
+                                            Style="{StaticResource Btn.Accent}"
+                                            Height="40"
+                                            FontSize="15"
+                                            FontWeight="SemiBold"
+                                            HorizontalAlignment="Stretch"
+                                            Click="Install_Click" />
+
+                                    <StackPanel x:Name="InstallProgressPanel" Visibility="Collapsed" Margin="0,10,0,0">
+                                        <views:Win10ProgressBar Height="5" Margin="0,0,0,6" />
+                                    </StackPanel>
+
+                                    <TextBlock x:Name="InstallStatus"
+                                               Style="{StaticResource Text.Caption}"
+                                               Margin="0,8,0,0"
+                                               TextWrapping="Wrap"
+                                               Text="Instalação silenciosa via winget (sem conta Microsoft)." />
+                                </StackPanel>
+                            </Grid>
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <!-- Corpo da Pagina de Produto: Capturas de tela + Descricao + Informacoes Adicionais -->
+                <StackPanel Grid.Row="1" Margin="36,24,36,40" MaxWidth="1120" HorizontalAlignment="Left">
+
+                    <!-- Galeria de Capturas de Tela -->
+                    <StackPanel x:Name="ScreenshotsSection" Visibility="Collapsed" Margin="0,0,0,28">
+                        <TextBlock Text="Capturas de tela" Style="{StaticResource Text.Subheader}" Margin="0,0,0,12" />
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                            <ItemsControl x:Name="ScreenshotsList">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Height="196" Margin="0,0,12,6"
+                                                Background="{DynamicResource App.Card}"
+                                                BorderBrush="{DynamicResource App.CardStroke}"
+                                                BorderThickness="1">
+                                            <Image Source="{Binding}" Stretch="Uniform"
+                                                   RenderOptions.BitmapScalingMode="HighQuality" />
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </StackPanel>
+
+                    <!-- Descricao -->
+                    <TextBlock Text="Descrição" Style="{StaticResource Text.Subheader}" Margin="0,0,0,10" />
+                    <Border Style="{StaticResource Card}">
+                        <TextBlock x:Name="DetailDescription"
+                                   Style="{StaticResource Text.Body}"
+                                   Text="Carregando descrição oficial..." />
+                    </Border>
+
+                    <!-- Informacoes adicionais (grade tipica da base da Loja do Windows 10) -->
+                    <TextBlock Text="Informações adicionais" Style="{StaticResource Text.Subheader}" Margin="0,28,0,12" />
+                    <Border Style="{StaticResource Card}">
+                        <UniformGrid Columns="4">
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Text="Publicado por" Style="{StaticResource Text.Section}" Margin="0,0,0,4" />
+                                <TextBlock x:Name="MetaPublisher" Text="—" Style="{StaticResource Text.Body}" FontSize="13" Foreground="{DynamicResource App.AccentText}" />
+                            </StackPanel>
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Text="Tamanho aproximado" Style="{StaticResource Text.Section}" Margin="0,0,0,4" />
+                                <TextBlock x:Name="MetaSize" Text="—" Style="{StaticResource Text.Body}" FontSize="13" Foreground="{DynamicResource App.Text}" />
+                            </StackPanel>
+                            <StackPanel Margin="0,0,16,0">
+                                <TextBlock Text="Versão / Ano" Style="{StaticResource Text.Section}" Margin="0,0,0,4" />
+                                <TextBlock x:Name="MetaVersion" Text="—" Style="{StaticResource Text.Body}" FontSize="13" Foreground="{DynamicResource App.Text}" />
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock Text="Product ID (msstore)" Style="{StaticResource Text.Section}" Margin="0,0,0,4" />
+                                <TextBlock x:Name="MetaProductId" Text="—" Style="{StaticResource Text.Mono}" />
+                            </StackPanel>
+                        </UniformGrid>
+                    </Border>
+
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

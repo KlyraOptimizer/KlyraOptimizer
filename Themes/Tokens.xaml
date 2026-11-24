@@ -1,0 +1,66 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ===================================================================
+         PALETA SEMANTICA DO WINDOWS 10 FLUENT DESIGN (1809–22H2)
+         Extraida do themeresources.xaml do Windows 10 SDK 10.0.19041.0.
+         Reescrita em tempo de execucao pelo ThemeService.
+         =================================================================== -->
+
+    <!-- Janela / Painel Acrylic / Pagina -->
+    <SolidColorBrush x:Key="App.WindowBorder"      Color="#FF0078D7" />
+    <SolidColorBrush x:Key="App.PaneAcrylic"       Color="#2E1F1F1F" />
+    <SolidColorBrush x:Key="App.PaneFallback"      Color="#FF1F1F1F" />
+    <SolidColorBrush x:Key="App.PageBackground"    Color="#FF111111" />
+    <SolidColorBrush x:Key="App.Layer"             Color="#FF171717" />
+    <SolidColorBrush x:Key="App.Card"              Color="#FF1F1F1F" />
+    <SolidColorBrush x:Key="App.CardHover"         Color="#FF282828" />
+    <SolidColorBrush x:Key="App.CardStroke"        Color="#28FFFFFF" />
+    <SolidColorBrush x:Key="App.CardStrokeHover"   Color="#55FFFFFF" />
+    <SolidColorBrush x:Key="App.CardSolid"         Color="#FF2B2B2B" />
+    <SolidColorBrush x:Key="App.Divider"           Color="#22FFFFFF" />
+    <SolidColorBrush x:Key="App.Hover"             Color="#19FFFFFF" />
+    <SolidColorBrush x:Key="App.Pressed"           Color="#33FFFFFF" />
+    <SolidColorBrush x:Key="App.NavSelected"       Color="#26FFFFFF" />
+
+    <!-- Texto (SystemBaseHigh / SystemBaseMedium / SystemBaseMediumLow) -->
+    <SolidColorBrush x:Key="App.Text"              Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="App.TextSecondary"     Color="#99FFFFFF" />
+    <SolidColorBrush x:Key="App.TextTertiary"      Color="#66FFFFFF" />
+
+    <!-- Destaque do Windows 10 (#0078D7 padrao ou cor do sistema) -->
+    <Color x:Key="App.AccentColor">#FF0078D7</Color>
+    <SolidColorBrush x:Key="App.Accent"            Color="#FF0078D7" />
+    <SolidColorBrush x:Key="App.AccentHover"       Color="#FF1986DF" />
+    <SolidColorBrush x:Key="App.AccentPressed"     Color="#FF005A9E" />
+    <SolidColorBrush x:Key="App.AccentText"        Color="#FF4CC2FF" />
+    <SolidColorBrush x:Key="App.AccentSoft"        Color="#280078D7" />
+    <SolidColorBrush x:Key="App.OnAccent"          Color="#FFFFFFFF" />
+
+    <!-- Controles UWP do Windows 10 (SystemBaseLow / SystemBaseMediumLow) -->
+    <SolidColorBrush x:Key="App.ControlFill"       Color="#33FFFFFF" />
+    <SolidColorBrush x:Key="App.ControlFillHover"  Color="#44FFFFFF" />
+    <SolidColorBrush x:Key="App.ControlStroke"     Color="#40FFFFFF" />
+    <SolidColorBrush x:Key="App.ControlStrokeHover" Color="#88FFFFFF" />
+    <SolidColorBrush x:Key="App.InputBackground"   Color="#B3141414" />
+    <SolidColorBrush x:Key="App.InputStroke"       Color="#66FFFFFF" />
+    <SolidColorBrush x:Key="App.HoverOverlay"      Color="#FFFFFFFF" />
+
+    <!-- Estados -->
+    <SolidColorBrush x:Key="App.Success"           Color="#FF10893E" />
+    <SolidColorBrush x:Key="App.SuccessText"       Color="#FF6CCB5F" />
+    <SolidColorBrush x:Key="App.SuccessSoft"       Color="#2410893E" />
+    <SolidColorBrush x:Key="App.Warning"           Color="#FFFFB900" />
+    <SolidColorBrush x:Key="App.WarningSoft"       Color="#24FFB900" />
+    <SolidColorBrush x:Key="App.Danger"            Color="#FFFF6B6B" />
+    <SolidColorBrush x:Key="App.DangerFill"        Color="#FFE81123" />
+    <SolidColorBrush x:Key="App.DangerSoft"        Color="#24E81123" />
+
+    <!-- Hero estilo Windows 10 Fluent -->
+    <LinearGradientBrush x:Key="App.HeroGradient" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#FF0078D7" Offset="0" />
+        <GradientStop Color="#FF005A9E" Offset="0.6" />
+        <GradientStop Color="#FF003966" Offset="1" />
+    </LinearGradientBrush>
+
+</ResourceDictionary>

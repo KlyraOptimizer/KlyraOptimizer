@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>KlyraOptimizer</AssemblyName>
+    <RootNamespace>KlyraOptimizer</RootNamespace>
+    <ApplicationIcon>Assets\KlyraOptimizer.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Version>1.5.2</Version>
+    <AssemblyVersion>1.5.2.0</AssemblyVersion>
+    <FileVersion>1.5.2.0</FileVersion>
+    <AssemblyTitle>Klyra Optimizer</AssemblyTitle>
+    <Product>Klyra Optimizer</Product>
+    <Company>Klyra Optimizer</Company>
+    <Description>Otimizador do Windows com interface Fluent Design nativa do Windows 10</Description>
+    <NeutralLanguage>pt-BR</NeutralLanguage>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\KlyraOptimizer.png" />
+    <Resource Include="Assets\KlyraOptimizer.ico" />
+  </ItemGroup>
+
+</Project>
+
