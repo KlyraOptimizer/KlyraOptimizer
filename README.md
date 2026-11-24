@@ -26,8 +26,8 @@
 2. **🔍 Scanner Pré-Execução Integrado**:
    Permite auditar o sistema antes de rodar qualquer otimização, detectando bloqueios de IFEO, estado de serviços de telemetria, HAGS, `Win32PrioritySeparation` e travas do Windows Update.
 
-3. **🎨 Interface ANSI com Paleta RGB Gradiente**:
-   Visual de terminal moderno com degradê em cores reais (TrueColor ANSI: Azul Royal $\rightarrow$ Índigo $\rightarrow$ Roxo $\rightarrow$ Rosa/Coral).
+3. **🎨 Interface WinUI 2 Extremamente Amigável**:
+   Visual extremamente amigável e confortável, sendo fácil de mexer, e fácil de configurar.
 
 ---
 
