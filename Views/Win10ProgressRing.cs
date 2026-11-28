@@ -5,9 +5,13 @@ using System.Windows.Media;
 namespace KlyraOptimizer.Views;
 
 /// <summary>
-/// Anel de carregamento autentico do Windows 10 (~4.0s para 2 voltas completas,
-/// agrupamento/desaceleracao centralizado exatamente no topo 0° / 12h e
-/// passagem continua sem engasgo pela parte inferior entre as voltas).
+/// Reproducao 1:1 do Windows.UI.Xaml.Controls.ProgressRing usado na XAML Controls Gallery
+/// (SDK 10.0.19041.0 generic.xaml):
+/// - 5 esferas (Small &lt; 36px) ou 6 esferas (Large &gt;= 36px), defasadas em -6° e 167ms;
+/// - 7 SplineDoubleKeyFrames exatos com avaliacao Bezier cubica (KeySpline) nativa do UWP:
+///   0.000s (-110°) -> 0.433s (10°, spline 0.02,0.33,0.38,0.77) -> 1.200s (93°, linear)
+///   -> 1.617s (205°, spline 0.57,0.17,0.95,0.75) -> 2.017s (357°, spline 0,0.19,0.07,0.72)
+///   -> 2.783s (439°, linear) -> 3.217s (585°, spline 0,0,0.95,0.37), ciclo total 4.305s.
 /// </summary>
 public sealed class Win10ProgressRing : FrameworkElement
 {
@@ -44,6 +48,8 @@ public sealed class Win10ProgressRing : FrameworkElement
     {
         Width = 20;
         Height = 20;
+        MinWidth = 16;
+        MinHeight = 16;
         IsHitTestVisible = false;
         Focusable = false;
         SetResourceReference(ForegroundProperty, "App.Accent");
@@ -118,87 +124,108 @@ public sealed class Win10ProgressRing : FrameworkElement
         if (side < 6) return;
 
         var brush = Foreground ?? Brushes.DodgerBlue;
-        var dotCount = side >= 34 ? 6 : 5;
-        var dotRadius = Math.Max(1.35, side * 0.072);
-        var orbitRadius = Math.Max(2.0, (side * 0.5) - dotRadius - 0.6);
+
+        // SizeStates de generic.xaml: Small (< 36px -> 5 esferas) / Large (>= 36px -> 6 esferas)
+        var dotCount = side >= 36.0 ? 6 : 5;
+
+        // ProgressRingTemplateSettings (EllipseDiameter & EllipseOffset)
+        var dotDiameter = side <= 20.0 ? 2.4 : (side <= 30.0 ? 3.0 : side * 0.10);
+        var dotRadius = Math.Max(1.15, dotDiameter * 0.5);
+        var orbitRadius = Math.Max(2.0, (side * 0.5) - dotRadius - 0.5);
         var cx = w * 0.5;
         var cy = h * 0.5;
 
-        // Ciclo autentico do Windows 10 (~4.0s para 2 voltas + pausa curta)
-        const double cycleDuration = 4.00;
-        const double dotStagger = 0.185;
-        const double dotLifetime = 3.05;
+        // Duracao exata do Storyboard em generic.xaml: BeginTime(E6)=0.835s + KeyTime=3.470s = 4.305s
+        const double cycleDuration = 4.305;
+        const double dotStagger = 0.167;
+        const double activeDuration = 3.217;
 
-        var elapsed = _clock.IsRunning ? _clock.Elapsed.TotalSeconds : 0.85;
+        var elapsed = _clock.IsRunning ? _clock.Elapsed.TotalSeconds : 0.90;
         var cycleTime = elapsed % cycleDuration;
 
         for (var i = 0; i < dotCount; i++)
         {
             var local = cycleTime - (i * dotStagger);
-            if (local < 0 || local > dotLifetime) continue;
+            if (local < 0.0 || local >= activeDuration) continue;
 
-            var u = local / dotLifetime; // 0.0 .. 1.0 ao longo das 2 voltas
-            var angleDeg = ComputeWin10RingAngle(u) - (i * 6.0);
+            var angleDeg = EvaluateUwpRingAngle(local) - (i * 6.0);
             var rad = angleDeg * (Math.PI / 180.0);
-
-            var alpha = 1.0;
-            if (u < 0.05) alpha = u / 0.05;
-            else if (u > 0.94) alpha = Math.Max(0, (1.0 - u) / 0.06);
 
             var x = cx + (orbitRadius * Math.Sin(rad));
             var y = cy - (orbitRadius * Math.Cos(rad));
 
-            if (alpha < 0.99)
-            {
-                dc.PushOpacity(alpha);
-                dc.DrawEllipse(brush, null, new Point(x, y), dotRadius, dotRadius);
-                dc.Pop();
-            }
-            else
-            {
-                dc.DrawEllipse(brush, null, new Point(x, y), dotRadius, dotRadius);
-            }
+            dc.DrawEllipse(brush, null, new Point(x, y), dotRadius, dotRadius);
         }
     }
 
     /// <summary>
-    /// Curva continua de 2 voltas (720°):
-    /// - Inicia em -160° subindo rapido com ease-out ate -35°;
-    /// - Desacelera de forma simetrica no topo entre -35° e +35° (centrado em 0° / 12h);
-    /// - Acelera com ease-in pela base de +35° ate +200° (-160° + 360°),
-    ///   conectando-se na velocidade maxima sem engasgo com o inicio da 2a volta!
+    /// Avalia exatamente os 7 SplineDoubleKeyFrames de E1R em generic.xaml (linhas 12529-12537).
     /// </summary>
-    private static double ComputeWin10RingAngle(double u)
+    private static double EvaluateUwpRingAngle(double t)
     {
-        var clamped = Math.Clamp(u, 0.0, 1.0);
-        var turn = clamped < 0.5 ? 0 : 1;
-        var t = clamped < 0.5 ? (clamped * 2.0) : ((clamped - 0.5) * 2.0); // 0.0 .. 1.0 por volta
+        if (t <= 0.0) return -110.0;
 
-        const double t1 = 0.27;
-        const double t2 = 0.65;
-
-        double localDeg;
-        if (t < t1)
+        if (t < 0.433)
         {
-            // Subida desacelerando da base (-160°) ate a entrada do topo (-35°): +125°
-            var p = t / t1;
-            var eased = 1.0 - Math.Pow(1.0 - p, 2.2);
-            localDeg = -160.0 + (125.0 * eased);
-        }
-        else if (t < t2)
-        {
-            // Agrupamento lento centralizado exatamente em 0° (12h): -35° -> +35° (+70°)
-            var p = (t - t1) / (t2 - t1);
-            localDeg = -35.0 + (70.0 * p);
-        }
-        else
-        {
-            // Descida acelerando de +35° ate +200° (-160° + 360°): +165° em velocidade continua
-            var p = (t - t2) / (1.0 - t2);
-            var eased = Math.Pow(p, 2.2);
-            localDeg = 35.0 + (165.0 * eased);
+            var u = t / 0.433;
+            return Lerp(-110.0, 10.0, EvaluateKeySpline(u, 0.02, 0.33, 0.38, 0.77));
         }
 
-        return localDeg + (turn * 360.0);
+        if (t < 1.200)
+        {
+            var u = (t - 0.433) / (1.200 - 0.433);
+            return Lerp(10.0, 93.0, u);
+        }
+
+        if (t < 1.617)
+        {
+            var u = (t - 1.200) / (1.617 - 1.200);
+            return Lerp(93.0, 205.0, EvaluateKeySpline(u, 0.57, 0.17, 0.95, 0.75));
+        }
+
+        if (t < 2.017)
+        {
+            var u = (t - 1.617) / (2.017 - 1.617);
+            return Lerp(205.0, 357.0, EvaluateKeySpline(u, 0.00, 0.19, 0.07, 0.72));
+        }
+
+        if (t < 2.783)
+        {
+            var u = (t - 2.017) / (2.783 - 2.017);
+            return Lerp(357.0, 439.0, u);
+        }
+
+        {
+            var u = Math.Clamp((t - 2.783) / (3.217 - 2.783), 0.0, 1.0);
+            return Lerp(439.0, 585.0, EvaluateKeySpline(u, 0.00, 0.00, 0.95, 0.37));
+        }
+    }
+
+    private static double Lerp(double a, double b, double t) => a + ((b - a) * t);
+
+    /// <summary>
+    /// Resolve Y(X) de uma curva Bezier cubica de KeySpline (0,0)-(x1,y1)-(x2,y2)-(1,1) via Newton-Raphson.
+    /// </summary>
+    internal static double EvaluateKeySpline(double x, double x1, double y1, double x2, double y2)
+    {
+        if (x <= 0.0) return 0.0;
+        if (x >= 1.0) return 1.0;
+        if (Math.Abs(x1 - y1) < 1e-6 && Math.Abs(x2 - y2) < 1e-6) return x;
+
+        var s = x;
+        for (var iter = 0; iter < 6; iter++)
+        {
+            var inv = 1.0 - s;
+            var bx = (3.0 * inv * inv * s * x1) + (3.0 * inv * s * s * x2) + (s * s * s) - x;
+            if (Math.Abs(bx) < 1e-7) break;
+
+            var dbx = (3.0 * inv * inv * x1) + (6.0 * inv * s * (x2 - x1)) + (3.0 * s * s * (1.0 - x2));
+            if (Math.Abs(dbx) < 1e-7) break;
+
+            s = Math.Clamp(s - (bx / dbx), 0.0, 1.0);
+        }
+
+        var u = 1.0 - s;
+        return (3.0 * u * u * s * y1) + (3.0 * u * s * s * y2) + (s * s * s);
     }
 }

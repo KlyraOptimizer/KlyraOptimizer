@@ -12,9 +12,10 @@ public enum ThemeMode
 }
 
 /// <summary>
-/// Tema Fluent Design do Windows 10: aplica paleta clara/escura baseada nos
-/// SystemChrome* / SystemBase* brushes do Windows 10 SDK 10.0.19041.0 e le a
-/// cor de destaque do Windows (#0078D7 por padrao).
+/// Tema Fluent Design do Windows 10 (1809/1903): aplica paleta clara/escura
+/// fiel a XAML Controls Gallery (#FF000000 / #FF111111 no fundo, #CC171717 no
+/// painel lateral Acrylic, #FF1F1F1F nos cards e #FF2B2B2B no hover) e respeita
+/// a Accent Color dinamica do Windows (#0078D7 padrao).
 /// </summary>
 public static class ThemeService
 {
@@ -28,30 +29,31 @@ public static class ThemeService
 
     private static readonly Dictionary<string, (string Dark, string Light)> Palette = new()
     {
-        // Painel lateral sobre o Acrylic nativo da janela: transparente suave quando Acrylic esta ativo
-        ["App.PaneAcrylic"] = ("#221F1F1F", "#28F2F2F2"),
+        ["App.PaneAcrylic"] = ("#99171717", "#B8EAEAEA"),
         ["App.PaneFallback"] = ("#FF1F1F1F", "#FFE6E6E6"),
-        ["App.PageBackground"] = ("#FF111111", "#FFFFFFFF"),
-        ["App.Layer"] = ("#FF171717", "#FFF2F2F2"),
+        ["App.PageBackground"] = ("#FF080808", "#FFFFFFFF"),
+        ["App.Layer"] = ("#FF111111", "#FFF2F2F2"),
         ["App.Card"] = ("#FF1F1F1F", "#FFF5F5F5"),
-        ["App.CardHover"] = ("#FF282828", "#FFEAEAEA"),
-        ["App.CardStroke"] = ("#24FFFFFF", "#1E000000"),
-        ["App.CardStrokeHover"] = ("#58FFFFFF", "#50000000"),
-        ["App.CardSolid"] = ("#FF2B2B2B", "#FFFFFFFF"),
+        ["App.CardHover"] = ("#FF2B2B2B", "#FFE6E6E6"),
+        ["App.CardStroke"] = ("#26FFFFFF", "#1F000000"),
+        ["App.CardStrokeHover"] = ("#66FFFFFF", "#58000000"),
+        ["App.CardSolid"] = ("#FF1F1F1F", "#FFFFFFFF"),
+        ["App.DialogFooter"] = ("#FF141414", "#FFF0F0F0"),
         ["App.Divider"] = ("#22FFFFFF", "#1A000000"),
         ["App.Hover"] = ("#19FFFFFF", "#14000000"),
         ["App.Pressed"] = ("#33FFFFFF", "#29000000"),
-        ["App.NavSelected"] = ("#28FFFFFF", "#1F000000"),
+        ["App.NavSelected"] = ("#26FFFFFF", "#1F000000"),
 
         ["App.Text"] = ("#FFFFFFFF", "#FF000000"),
         ["App.TextSecondary"] = ("#B3FFFFFF", "#99000000"),
         ["App.TextTertiary"] = ("#78FFFFFF", "#66000000"),
 
-        ["App.ControlFill"] = ("#28FFFFFF", "#14000000"),
-        ["App.ControlFillHover"] = ("#38FFFFFF", "#22000000"),
+        ["App.ControlFill"] = ("#2BFFFFFF", "#14000000"),
+        ["App.ControlFillHover"] = ("#3BFFFFFF", "#22000000"),
         ["App.ControlStroke"] = ("#38FFFFFF", "#33000000"),
         ["App.ControlStrokeHover"] = ("#88FFFFFF", "#7A000000"),
-        ["App.InputBackground"] = ("#CC121212", "#FFFFFFFF"),
+        ["App.InputBackground"] = ("#B3141414", "#FFFFFFFF"),
+        ["App.InputBackgroundFocus"] = ("#FF1F1F1F", "#FFFFFFFF"),
         ["App.InputStroke"] = ("#66FFFFFF", "#66000000"),
         ["App.HoverOverlay"] = ("#FFFFFFFF", "#FF000000"),
 
@@ -135,7 +137,7 @@ public static class ThemeService
         tokens["App.AccentText"] = Freeze(new SolidColorBrush(accentText));
         tokens["App.AccentSoft"] = Freeze(new SolidColorBrush(Color.FromArgb(light ? (byte)0x1E : (byte)0x2B, fill.R, fill.G, fill.B)));
         tokens["App.OnAccent"] = Freeze(new SolidColorBrush(onAccent));
-        tokens["App.WindowBorder"] = Freeze(new SolidColorBrush(Color.FromArgb(0xB8, fill.R, fill.G, fill.B)));
+        tokens["App.WindowBorder"] = Freeze(new SolidColorBrush(Color.FromArgb(0xCC, fill.R, fill.G, fill.B)));
 
         var hero = new LinearGradientBrush
         {
@@ -200,7 +202,6 @@ public static class ThemeService
         }
         catch { }
 
-        // Azul classico do Windows 10 (#0078D7)
         return Color.FromRgb(0x00, 0x78, 0xD7);
     }
 

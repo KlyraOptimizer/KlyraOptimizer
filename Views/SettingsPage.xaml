@@ -5,37 +5,71 @@
              FontFamily="{StaticResource Font.Ui}">
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Margin="36,16,36,36" MaxWidth="1100" HorizontalAlignment="Left">
+        <StackPanel Margin="32,20,32,40" MaxWidth="1100" HorizontalAlignment="Left">
 
             <TextBlock Text="Configurações" Style="{StaticResource Text.PageTitle}" />
             <TextBlock Style="{StaticResource Text.PageSubtitle}"
-                       Text="Personalização de cores e transparência, informações do sistema e pasta de logs em segundo plano." />
+                       Text="Inicialização, bandeja do sistema, modo de tema, especificações e registros silenciosos." />
 
-            <!-- ===================== APARENCIA ===================== -->
-            <TextBlock Text="Personalização" Style="{StaticResource Text.Subheader}" Margin="0,24,0,12" />
+            <!-- ===================== COMPORTAMENTO E BANDEJA DO SISTEMA ===================== -->
+            <TextBlock Text="Inicialização e bandeja do sistema" Style="{StaticResource Text.Subheader}" Margin="0,24,0,12" />
 
             <Border Style="{StaticResource Card}">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <Grid Margin="0,0,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                            <TextBlock Text="Iniciar junto com o sistema" Style="{StaticResource Text.CardTitle}" />
+                            <TextBlock Style="{StaticResource Text.Caption}" Margin="0,2,0,0"
+                                       Text="Inicia o Klyra Optimizer automaticamente em segundo plano ao entrar no Windows." />
+                        </StackPanel>
+                        <CheckBox x:Name="StartWithWindowsSwitch"
+                                  Grid.Column="1"
+                                  Style="{StaticResource ToggleSwitch.Win10}"
+                                  IsChecked="True"
+                                  VerticalAlignment="Center"
+                                  Click="StartWithWindows_Click" />
+                    </Grid>
 
-                    <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="Modo de cor do aplicativo" Style="{StaticResource Text.CardTitle}" />
-                        <TextBlock x:Name="ThemeDetail" Style="{StaticResource Text.Caption}" Margin="0,3,0,0"
-                                   Text="Segue automaticamente o tema claro/escuro e a cor de destaque do Windows." />
-                    </StackPanel>
+                    <Border Style="{StaticResource Divider}" Margin="0,0,0,14" />
 
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                        <RadioButton x:Name="ThemeSystem" GroupName="Theme" Style="{StaticResource Pill.Radio}"
-                                     Content="Padrão do Windows" IsChecked="True" Click="Theme_Click" Tag="system" />
-                        <RadioButton x:Name="ThemeLight" GroupName="Theme" Style="{StaticResource Pill.Radio}"
-                                     Content="Claro" Click="Theme_Click" Tag="light" />
-                        <RadioButton x:Name="ThemeDark" GroupName="Theme" Style="{StaticResource Pill.Radio}"
-                                     Content="Escuro" Margin="0" Click="Theme_Click" Tag="dark" />
-                    </StackPanel>
-                </Grid>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                            <TextBlock Text="Fechar e ficar na bandeja do sistema" Style="{StaticResource Text.CardTitle}" />
+                            <TextBlock Style="{StaticResource Text.Caption}" Margin="0,2,0,0"
+                                       Text="Ao fechar a janela, mantém o ícone na bandeja com atalhos rápidos para Limpar RAM, Reset Rede e Fechar." />
+                        </StackPanel>
+                        <CheckBox x:Name="CloseToTraySwitch"
+                                  Grid.Column="1"
+                                  Style="{StaticResource ToggleSwitch.Win10}"
+                                  IsChecked="True"
+                                  VerticalAlignment="Center"
+                                  Click="CloseToTray_Click" />
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- ===================== TEMA (IGUAL AO SETTINGSPAGE DA XAML CONTROLS GALLERY) ===================== -->
+            <TextBlock Text="Modo de tema" Style="{StaticResource Text.Subheader}" Margin="0,28,0,12" />
+
+            <Border Style="{StaticResource Card}">
+                <StackPanel>
+                    <RadioButton x:Name="ThemeLight" GroupName="Theme" Style="{StaticResource Radio.Win10}"
+                                 Content="Claro" Click="Theme_Click" Tag="light" />
+                    <RadioButton x:Name="ThemeDark" GroupName="Theme" Style="{StaticResource Radio.Win10}"
+                                 Content="Escuro" Click="Theme_Click" Tag="dark" />
+                    <RadioButton x:Name="ThemeSystem" GroupName="Theme" Style="{StaticResource Radio.Win10}"
+                                 Content="Usar configuração do Windows" Margin="0" IsChecked="True" Click="Theme_Click" Tag="system" />
+                    <TextBlock x:Name="ThemeDetail" Style="{StaticResource Text.Caption}" Margin="0,10,0,0"
+                               Text="Segue automaticamente o tema claro/escuro e a cor de destaque do Windows." />
+                </StackPanel>
             </Border>
 
             <!-- ===================== SISTEMA ===================== -->
@@ -115,7 +149,7 @@
                 <StackPanel>
                     <TextBlock Text="Arquivo de log desta sessão" Style="{StaticResource Text.CardTitle}" />
                     <TextBlock Style="{StaticResource Text.Caption}" Margin="0,2,0,6"
-                               Text="Todas as operações do Klyra Optimizer rodam sem console na tela e salvam o histórico completo automaticamente:" />
+                               Text="Todas as operações rodam silenciosamente sem console na tela e salvam o histórico completo em:" />
                     <TextBlock x:Name="InfoLogPath" Style="{StaticResource Text.Mono}"
                                TextWrapping="Wrap" Text="—" />
 
@@ -133,11 +167,20 @@
 
             <Border Style="{StaticResource Card}">
                 <StackPanel>
-                    <TextBlock Text="Klyra Optimizer" Style="{StaticResource Text.CardTitle}" FontSize="17" FontWeight="SemiBold" />
-                    <TextBlock x:Name="AboutVersion" Style="{StaticResource Text.Caption}" Margin="0,4,0,0"
-                               Text="Versão 1.5.2 — Windows 10 Fluent Edition" />
-                    <TextBlock Style="{StaticResource Text.Body}" Margin="0,10,0,0"
-                               Text="Interface Fluent Design autêntica do Windows 10 com efeito Acrylic, navegação SplitView e Loja estilo Windows 10 Store integrada ao winget." />
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Image Source="pack://application:,,,/Assets/KlyraOptimizer.png"
+                               Width="36" Height="36"
+                               VerticalAlignment="Center"
+                               RenderOptions.BitmapScalingMode="HighQuality"
+                               Margin="0,0,14,0" />
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="Klyra Optimizer" Style="{StaticResource Text.CardTitle}" FontSize="17" FontWeight="SemiBold" />
+                            <TextBlock x:Name="AboutVersion" Style="{StaticResource Text.Caption}" Margin="0,2,0,0"
+                                       Text="Versão 1.6.0 — Windows 10 Fluent Edition (1809/1903)" />
+                        </StackPanel>
+                    </StackPanel>
+                    <TextBlock Style="{StaticResource Text.Body}" Margin="0,12,0,0"
+                               Text="Interface Fluent Design clássica do Windows 10 (Acrylic Blur, Reveal Highlight, Tilt Effect 3D e controles nativos inspirados na XAML Controls Gallery)." />
                     <TextBlock Style="{StaticResource Text.Caption}" Margin="0,8,0,0"
                                Text="Requisitos: Windows 10 21H2 (build 19044) ou superior, incluindo Windows 11 (x64)." />
 

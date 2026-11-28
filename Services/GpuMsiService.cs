@@ -5,13 +5,14 @@ using Microsoft.Win32;
 namespace KlyraOptimizer.Services;
 
 /// <summary>
-/// Porte do modulo GpuMsi do script original: ativa o modo MSI nas GPUs PCI,
-/// guarda o valor anterior em HKLM\SOFTWARE\KlyraOptimizer\MSI e permite
-/// reverter exatamente como estava.
+/// Porte corrigido do modulo GpuMsi do FunçõesDoOtimizador.bat: ativa o modo MSI nas GPUs PCI
+/// diretamente em HKLM\SYSTEM\CurrentControlSet\Enum\..., guarda o valor anterior em
+/// HKLM\SOFTWARE\KlyraOptimizer\MSI e permite reverter exatamente como estava.
 /// </summary>
 public sealed class GpuMsiService
 {
     private const string RecordKey = @"SOFTWARE\KlyraOptimizer\MSI";
+    private const string LegacyRecordKey = @"SOFTWARE\AzureOptimizer\MSI";
     private const string Suffix = @"\Device Parameters\Interrupt Management\MessageSignaledInterruptProperties";
 
     private readonly AppLog _log;
@@ -41,7 +42,6 @@ public sealed class GpuMsiService
                 "Select-Object Name,PNPDeviceID | ConvertTo-Json -Compress",
                 45000);
 
-            // A saida pode vir com ruido (banner CLIXML, avisos): isola o JSON.
             var objectIndex = json.IndexOf('{');
             var arrayIndex = json.IndexOf('[');
             var start = objectIndex < 0
@@ -92,6 +92,9 @@ public sealed class GpuMsiService
 
     public void Apply(TweakEngine engine)
     {
+        // Limpa eventual subchave orfa "HKLM\HKLM" criada por versoes antigas
+        try { Registry.LocalMachine.DeleteSubKeyTree("HKLM", throwOnMissingSubKey: false); } catch { }
+
         var gpus = GetGpus();
         if (gpus.Count == 0)
         {
@@ -103,8 +106,10 @@ public sealed class GpuMsiService
         {
             _log.Write($"   [GPU] {gpu.Name} [{gpu.Vendor}]", LogKind.Info);
 
-            var path = $@"HKLM\SYSTEM\CurrentControlSet\Enum\{gpu.PnpId}{Suffix}";
-            var current = TweakEngine.ReadInt(path, "MSISupported");
+            // Caminho relativo a HKLM (sem prefixo "HKLM\") para CreateSubKey/OpenSubKey
+            var subKey = $@"SYSTEM\CurrentControlSet\Enum\{gpu.PnpId}{Suffix}";
+            var fullPath = $@"HKLM\{subKey}";
+            var current = TweakEngine.ReadInt(fullPath, "MSISupported");
 
             if (current == 1)
             {
@@ -114,33 +119,44 @@ public sealed class GpuMsiService
 
             try
             {
-                using var key = Registry.LocalMachine.CreateSubKey(path, writable: true)
-                                ?? throw new InvalidOperationException("chave do dispositivo não encontrada");
+                using var key = Registry.LocalMachine.CreateSubKey(subKey, writable: true)
+                                ?? throw new InvalidOperationException("chave PCI do dispositivo não encontrada");
                 key.SetValue("MSISupported", 1, RegistryValueKind.DWord);
 
                 using var record = Registry.LocalMachine.CreateSubKey(RecordKey, writable: true);
                 var name = string.Concat(gpu.PnpId.Select(c => char.IsLetterOrDigit(c) ? c : '_'));
                 record?.SetValue(name, $"{gpu.PnpId}|{(current?.ToString() ?? "absent")}", RegistryValueKind.String);
 
-                _log.Write($"   [APLICADO] Modo MSI {gpu.Vendor} (reinicie para efetivar)", LogKind.Applied);
+                engine.MarkApplied($"Modo MSI {gpu.Vendor} (reinicie para efetivar)");
             }
             catch (Exception ex)
             {
-                _log.Write($"   [BLOQUEADO/ERRO] Modo MSI {gpu.Vendor} — {ex.Message}", LogKind.Failed);
+                engine.MarkFailed($"Modo MSI {gpu.Vendor} — {ex.Message}");
             }
         }
     }
 
     public void Revert(TweakEngine engine)
     {
-        using var record = Registry.LocalMachine.OpenSubKey(RecordKey);
-        if (record == null)
-        {
-            _log.Write("   Nenhum ajuste de MSI Mode registrado pelo Klyra Optimizer (nada a reverter).", LogKind.Skipped);
-            return;
-        }
+        try { Registry.LocalMachine.DeleteSubKeyTree("HKLM", throwOnMissingSubKey: false); } catch { }
 
-        foreach (var name in record.GetValueNames())
+        var revertedAny = RevertFromRecordKey(RecordKey, engine) | RevertFromRecordKey(LegacyRecordKey, engine);
+        if (!revertedAny)
+        {
+            _log.Write("   Nenhum ajuste de MSI Mode registrado (nada a reverter).", LogKind.Skipped);
+        }
+    }
+
+    private bool RevertFromRecordKey(string recordKeyPath, TweakEngine engine)
+    {
+        using var record = Registry.LocalMachine.OpenSubKey(recordKeyPath);
+        if (record == null) return false;
+
+        var names = record.GetValueNames();
+        if (names.Length == 0) return false;
+
+        var any = false;
+        foreach (var name in names)
         {
             var value = record.GetValue(name) as string;
             if (string.IsNullOrEmpty(value)) continue;
@@ -148,31 +164,35 @@ public sealed class GpuMsiService
             var parts = value.Split('|');
             if (parts.Length < 2) continue;
 
-            var path = $@"HKLM\SYSTEM\CurrentControlSet\Enum\{parts[0]}{Suffix}";
+            var subKey = $@"SYSTEM\CurrentControlSet\Enum\{parts[0]}{Suffix}";
 
             try
             {
-                using var key = Registry.LocalMachine.OpenSubKey(path, writable: true);
-                if (key == null) continue;
-
-                if (parts[1] == "absent")
+                using var key = Registry.LocalMachine.OpenSubKey(subKey, writable: true);
+                if (key != null)
                 {
-                    key.DeleteValue("MSISupported", throwOnMissingValue: false);
-                }
-                else
-                {
-                    key.SetValue("MSISupported", int.Parse(parts[1]), RegistryValueKind.DWord);
+                    if (parts[1] == "absent")
+                    {
+                        key.DeleteValue("MSISupported", throwOnMissingValue: false);
+                    }
+                    else if (int.TryParse(parts[1], out var prevVal))
+                    {
+                        key.SetValue("MSISupported", prevVal, RegistryValueKind.DWord);
+                    }
                 }
 
-                using var writable = Registry.LocalMachine.OpenSubKey(RecordKey, writable: true);
+                using var writable = Registry.LocalMachine.OpenSubKey(recordKeyPath, writable: true);
                 writable?.DeleteValue(name, throwOnMissingValue: false);
 
-                _log.Write($"   [REVERTIDO] Modo MSI de {parts[0]}", LogKind.Applied);
+                engine.MarkApplied($"Modo MSI revertido ({parts[0]})");
+                any = true;
             }
             catch (Exception ex)
             {
-                _log.Write($"   [ERRO] Modo MSI de {parts[0]} — {ex.Message}", LogKind.Failed);
+                engine.MarkFailed($"Modo MSI de {parts[0]} — {ex.Message}");
             }
         }
+
+        return any;
     }
 }

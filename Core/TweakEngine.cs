@@ -21,10 +21,6 @@ public sealed class TweakEngine
 
     public event Action? CountersChanged;
 
-    /// <summary>
-    /// Publica os contadores sempre na thread da interface: os ajustes rodam
-    /// em segundo plano e os assinantes do evento atualizam controles WPF.
-    /// </summary>
     private void RaiseCounters()
     {
         var handler = CountersChanged;
@@ -101,37 +97,24 @@ public sealed class TweakEngine
     }
 
     // ------------------------------------------------------------------
-    // Servicos do Windows
+    // Servicos do Windows (fiel ao :SAFE_SC do script original: sc config + reg Start)
     // ------------------------------------------------------------------
     public void SetServiceStart(string service, int start, string? description = null)
     {
         description ??= $"Serviço {service}";
         const string root = @"HKLM\SYSTEM\CurrentControlSet\Services";
 
-        if (ReadValue($@"{root}\{service}", "Start") == null)
+        var current = ReadValue($@"{root}\{service}", "Start");
+        if (current == null)
         {
             // Servico nao existe nesta edicao do Windows: ignora em silencio.
             return;
         }
 
-        var current = ReadValue($@"{root}\{service}", "Start");
-        if (current != null && Convert.ToInt64(current) == start)
+        if (Convert.ToInt64(current) == start)
         {
             Skip($"{description} (Start = {start})");
             return;
-        }
-
-        try
-        {
-            WriteValue($@"{root}\{service}", "Start", RegistryValueKind.DWord, start);
-            Applied++;
-            _log.Write($"   [SERVICO AJUSTADO] {description} (Start -> {start})", LogKind.Applied);
-            RaiseCounters();
-            return;
-        }
-        catch
-        {
-            // Alguns servicos protegidos recusam escrita direta: tenta via sc.exe
         }
 
         var mode = start switch
@@ -142,12 +125,32 @@ public sealed class TweakEngine
             _ => "demand"
         };
 
-        var output = Shell.Run("sc.exe", $"config \"{service}\" start= {mode}");
-        if (output.Contains("SUCCESS", StringComparison.OrdinalIgnoreCase) ||
-            output.Contains("SUCESSO", StringComparison.OrdinalIgnoreCase))
+        var ok = false;
+
+        // 1) Atualiza o Service Control Manager em memoria via sc.exe config
+        var scRes = Shell.RunCapture("sc.exe", $"config \"{service}\" start= {mode}", 20000);
+        if (scRes.Code == 0 ||
+            scRes.Output.Contains("SUCCESS", StringComparison.OrdinalIgnoreCase) ||
+            scRes.Output.Contains("SUCESSO", StringComparison.OrdinalIgnoreCase))
+        {
+            ok = true;
+        }
+
+        // 2) Garante persistencia direta em HKLM\SYSTEM\CurrentControlSet\Services\<svc>\Start
+        try
+        {
+            WriteValue($@"{root}\{service}", "Start", RegistryValueKind.DWord, start);
+            ok = true;
+        }
+        catch
+        {
+            // Alguns servicos PPL/TrustedInstaller aceitam apenas sc.exe ou bloqueiam escrita direta
+        }
+
+        if (ok)
         {
             Applied++;
-            _log.Write($"   [SERVICO AJUSTADO] {description} (sc config start= {mode})", LogKind.Applied);
+            _log.Write($"   [SERVICO AJUSTADO] {description} (Start -> {start})", LogKind.Applied);
         }
         else
         {
@@ -162,22 +165,27 @@ public sealed class TweakEngine
     {
         try
         {
-            Shell.Run("sc.exe", $"stop \"{service}\"", 20000);
+            Shell.Run("sc.exe", $"stop \"{service}\"", 15000);
         }
         catch
         {
-            // ignorado: alguns servicos ja estao parados
+            // ignorado: servico ja parado ou protegido
         }
     }
 
     // ------------------------------------------------------------------
-    // BCD (boot configuration)
+    // BCD (boot configuration - comparacao linha a linha fiel ao findstr do .bat)
     // ------------------------------------------------------------------
     public void BcdSet(string property, string value, string description)
     {
         var enumCurrent = Shell.Run("bcdedit.exe", "/enum {current}", 20000);
-        if (enumCurrent.Contains(property, StringComparison.OrdinalIgnoreCase) &&
-            enumCurrent.Contains(value, StringComparison.OrdinalIgnoreCase))
+        var alreadySet = enumCurrent
+            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Any(line =>
+                line.Contains(property, StringComparison.OrdinalIgnoreCase) &&
+                line.Contains(value, StringComparison.OrdinalIgnoreCase));
+
+        if (alreadySet)
         {
             Skip($"BCD {description} ({property} = {value})");
             return;
@@ -201,7 +209,11 @@ public sealed class TweakEngine
     public void BcdDelete(string property, string description)
     {
         var enumCurrent = Shell.Run("bcdedit.exe", "/enum {current}", 20000);
-        if (!enumCurrent.Contains(property, StringComparison.OrdinalIgnoreCase))
+        var exists = enumCurrent
+            .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Any(line => line.Contains(property, StringComparison.OrdinalIgnoreCase));
+
+        if (!exists)
         {
             Skip($"BCD {description} ({property} ja estava no padrão)");
             return;
@@ -225,20 +237,27 @@ public sealed class TweakEngine
     // ------------------------------------------------------------------
     // Ferramentas de linha de comando (compact, powercfg, netsh...)
     // ------------------------------------------------------------------
-    public void RunTool(string fileName, string arguments, string description, bool countAsApplied = true)
+    public void RunTool(string fileName, string arguments, string description, bool countAsApplied = true, bool ignoreNonZeroExit = false)
     {
         try
         {
-            Shell.Run(fileName, arguments, 120000);
-            if (countAsApplied)
+            var (code, _) = Shell.RunCapture(fileName, arguments, 120000);
+            if (code == 0 || ignoreNonZeroExit)
             {
-                Applied++;
-                _log.Write($"   [EXECUTADO] {description}", LogKind.Applied);
-                RaiseCounters();
+                if (countAsApplied)
+                {
+                    Applied++;
+                    _log.Write($"   [EXECUTADO] {description}", LogKind.Applied);
+                    RaiseCounters();
+                }
+                else
+                {
+                    _log.Write($"   [EXECUTADO] {description}", LogKind.Info);
+                }
             }
             else
             {
-                _log.Write($"   [EXECUTADO] {description}", LogKind.Info);
+                _log.Write($"   [AVISO] {description} retornou código {code}", LogKind.Warning);
             }
         }
         catch (Exception ex)
@@ -259,11 +278,17 @@ public sealed class TweakEngine
         RaiseCounters();
     }
 
-    /// <summary>Registra uma acao externa (script PowerShell, AppX...) nos contadores.</summary>
     public void MarkApplied(string description)
     {
         Applied++;
         _log.Write($"   [EXECUTADO] {description}", LogKind.Applied);
+        RaiseCounters();
+    }
+
+    public void MarkFailed(string description)
+    {
+        Failed++;
+        _log.Write($"   [BLOQUEADO/ERRO] {description}", LogKind.Failed);
         RaiseCounters();
     }
 

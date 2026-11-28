@@ -1,7 +1,9 @@
-﻿using System.IO;
+﻿using System.ComponentModel;
+using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using KlyraOptimizer.Core;
@@ -9,20 +11,45 @@ using KlyraOptimizer.Views;
 
 namespace KlyraOptimizer;
 
+public sealed class NavSearchEntry
+{
+    public string Glyph { get; init; } = "\uE721";
+    public string Label { get; init; } = string.Empty;
+    public string Keywords { get; init; } = string.Empty;
+    public string TargetPage { get; init; } = "home";
+    public string? StoreQuery { get; init; }
+}
+
 public partial class MainWindow : Window
 {
-    private const double ExpandedPaneWidth = 268;
-    private const double CompactPaneWidth = 48;
+    private const double ExpandedPaneWidth = 280;
+    private const double CompactPaneWidth = 49;
 
     private readonly Dictionary<string, FrameworkElement> _pages = new();
     private readonly Stack<string> _backStack = new();
     private string _current = "home";
     private bool _suppressHistory;
-    private bool _paneOpen = true;
+    private bool _paneOpen = false;
     private bool _windowActive = true;
+    private bool _trayHintShown;
+    private TaskCompletionSource<bool>? _dialogTcs;
 
     private static readonly string[] SmokePages =
         { "home", "optimizer", "tool", "store", "tools", "restore", "settings" };
+
+    private static readonly NavSearchEntry[] SearchIndex =
+    {
+        new() { Glyph = "\uE80F", Label = "Início — Visão geral do sistema", Keywords = "inicio home dashboard sistema status", TargetPage = "home" },
+        new() { Glyph = "\uE945", Label = "Otimizador — Perfis Standard, Medium e Avançado", Keywords = "otimizador standard medium avancado fps telemetria compactos delay", TargetPage = "optimizer" },
+        new() { Glyph = "\uE90F", Label = "Klyra Tool — Alternar recursos individuais ao vivo", Keywords = "klyra tool toggles windows update copilot gamedvr vbs hvci sysmain superfetch bluetooth", TargetPage = "tool" },
+        new() { Glyph = "\uE74D", Label = "Limpar memória RAM e arquivos temporários", Keywords = "limpar ram memoria temp cache", TargetPage = "tool" },
+        new() { Glyph = "\uE895", Label = "Reset completo de rede (Winsock, TCP/IP e DNS)", Keywords = "rede dns winsock ping internet latencia", TargetPage = "tool" },
+        new() { Glyph = "\uE719", Label = "Microsoft Store — Baixar aplicativos via winget", Keywords = "loja microsoft store winget aplicativos jogos spotify discord whatsapp", TargetPage = "store" },
+        new() { Glyph = "\uEC7A", Label = "Ferramentas — Scanner de conflitos, WinUtil e BleachBit", Keywords = "ferramentas conflitos scanner winutil bleachbit", TargetPage = "tools" },
+        new() { Glyph = "\uE7FC", Label = "Hardware — MSI Mode das GPUs PCI", Keywords = "gpu msi placa de video nvidia amd latencia", TargetPage = "tools" },
+        new() { Glyph = "\uE81C", Label = "Restauração — Pontos de restauração e Reverter tudo", Keywords = "restauracao ponto reverter backup rstrui padrao", TargetPage = "restore" },
+        new() { Glyph = "\uE713", Label = "Configurações — Tema, logs e sobre o Klyra Optimizer", Keywords = "configuracoes tema escuro claro logs desinstalar sobre", TargetPage = "settings" }
+    };
 
     public MainWindow()
     {
@@ -32,9 +59,11 @@ public partial class MainWindow : Window
         AppServices.NavigationRequested = key =>
             Dispatcher.BeginInvoke(new Action(() => Navigate(key)), DispatcherPriority.Normal);
 
+        AppServices.DialogRequested = ShowModalDialogAsync;
+
         SourceInitialized += (_, _) =>
         {
-            Win10Acrylic.AttachMaximizeFix(this);
+            Win10Acrylic.AttachWindowHooks(this, ApplyWindowAcrylic);
             ApplyWindowAcrylic();
         };
         Activated += (_, _) =>
@@ -76,8 +105,6 @@ public partial class MainWindow : Window
         {
             var acrylicActive = Win10Acrylic.Apply(this, ThemeService.IsLight, _windowActive);
 
-            // Com o Acrylic DWM ligado, o painel lateral usa tint translucido; quando a janela
-            // perde o foco ou transparencia esta desligada, usa o fallback solido do UWP Win10.
             NavPane.Background = (Brush)FindResource(acrylicActive ? "App.PaneAcrylic" : "App.PaneFallback");
             OuterFrame.BorderBrush = _windowActive
                 ? (Brush)FindResource("App.WindowBorder")
@@ -111,7 +138,7 @@ public partial class MainWindow : Window
 
         if (Content is FrameworkElement root)
         {
-            Motion.FadeIn(root, offsetY: 0, milliseconds: 200);
+            Motion.FadeIn(root, offsetY: 0, milliseconds: 180);
         }
 
         var args = Environment.GetCommandLineArgs();
@@ -123,29 +150,149 @@ public partial class MainWindow : Window
 
         _suppressHistory = true;
         SyncNavSelection(_current);
-        Navigate(_current, pushHistory: false);
+        Navigate(_current, pushHistory: false, animate: false);
         _suppressHistory = false;
     }
 
+    // ------------------------------------------------------------------
+    // NavigationView SplitView & AutoSuggestBox (estilo XAML Controls Gallery)
+    // ------------------------------------------------------------------
     private void Hamburger_Click(object sender, RoutedEventArgs e)
     {
         _paneOpen = !_paneOpen;
+        NavSuggestionsPopup.IsOpen = false;
         Motion.AnimateWidth(NavPane, _paneOpen ? ExpandedPaneWidth : CompactPaneWidth);
         UpdatePaneElements();
     }
 
     private void UpdatePaneElements()
     {
-        PaneTitlePanel.Visibility = _paneOpen ? Visibility.Visible : Visibility.Collapsed;
-        PaneBrandLabel.Visibility = _paneOpen ? Visibility.Visible : Visibility.Collapsed;
+        PaneAppTitle.Visibility = _paneOpen ? Visibility.Visible : Visibility.Collapsed;
         CollapsedTitleText.Visibility = _paneOpen ? Visibility.Collapsed : Visibility.Visible;
+        NavSearchHost.Visibility = _paneOpen ? Visibility.Visible : Visibility.Collapsed;
+        NavSearchCompactButton.Visibility = _paneOpen ? Visibility.Collapsed : Visibility.Visible;
         ModeStatusBox.Visibility = _paneOpen ? Visibility.Visible : Visibility.Collapsed;
         AdminBanner.Visibility = _paneOpen && !Shell.IsAdmin ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    private void NavSearchCompact_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_paneOpen)
+        {
+            _paneOpen = true;
+            Motion.AnimateWidth(NavPane, ExpandedPaneWidth);
+            UpdatePaneElements();
+        }
+
+        Dispatcher.BeginInvoke(new Action(() => NavSearchBox.Focus()), DispatcherPriority.Input);
+    }
+
+    private void NavSearchBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        var query = NavSearchBox.Text.Trim();
+        if (query.Length == 0)
+        {
+            NavSuggestionsPopup.IsOpen = false;
+            return;
+        }
+
+        var matches = SearchIndex
+            .Where(item =>
+                item.Label.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                item.Keywords.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .Take(6)
+            .ToList();
+
+        matches.Add(new NavSearchEntry
+        {
+            Glyph = "\uE719",
+            Label = $"Buscar \"{query}\" na Microsoft Store",
+            TargetPage = "store",
+            StoreQuery = query
+        });
+
+        NavSuggestionsList.ItemsSource = matches;
+        NavSuggestionsPopup.IsOpen = true;
+    }
+
+    private void NavSearchBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            NavSuggestionsPopup.IsOpen = false;
+            return;
+        }
+
+        if (e.Key == Key.Enter)
+        {
+            SubmitNavSearch();
+        }
+    }
+
+    private void NavSearchBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (!NavSuggestionsPopup.IsKeyboardFocusWithin)
+            {
+                NavSuggestionsPopup.IsOpen = false;
+            }
+        }), DispatcherPriority.Background);
+    }
+
+    private void NavSearchSubmit_Click(object sender, RoutedEventArgs e) => SubmitNavSearch();
+
+    private void SubmitNavSearch()
+    {
+        var query = NavSearchBox.Text.Trim();
+        if (query.Length == 0) return;
+
+        NavSuggestionsPopup.IsOpen = false;
+
+        var firstMatch = SearchIndex.FirstOrDefault(item =>
+            item.Label.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+            item.Keywords.Contains(query, StringComparison.OrdinalIgnoreCase));
+
+        if (firstMatch != null)
+        {
+            Navigate(firstMatch.TargetPage);
+        }
+        else
+        {
+            NavigateToStoreSearch(query);
+        }
+    }
+
+    private void NavSuggestion_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: NavSearchEntry entry }) return;
+        NavSuggestionsPopup.IsOpen = false;
+        NavSearchBox.Clear();
+
+        if (!string.IsNullOrWhiteSpace(entry.StoreQuery))
+        {
+            NavigateToStoreSearch(entry.StoreQuery!);
+        }
+        else
+        {
+            Navigate(entry.TargetPage);
+        }
+    }
+
+    private void NavigateToStoreSearch(string query)
+    {
+        Navigate("store");
+        if (PageHost.Content is StorePage store)
+        {
+            store.RunExternalSearch(query);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Navegacao & Historico (Entrance / DrillIn)
+    // ------------------------------------------------------------------
     private void Back_Click(object sender, RoutedEventArgs e)
     {
-        // Se a Loja estiver aberta em um aplicativo especifico, volta primeiro para a vitrine
         if (_current == "store" && PageHost.Content is StorePage store && store.CanNavigateBack)
         {
             store.NavigateBackToHome();
@@ -165,8 +312,7 @@ public partial class MainWindow : Window
     public void UpdateBackButton()
     {
         var storeCanBack = _current == "store" && PageHost.Content is StorePage s && s.CanNavigateBack;
-        var canBack = storeCanBack || _backStack.Count > 0;
-        BackButton.Visibility = canBack ? Visibility.Visible : Visibility.Collapsed;
+        BackButton.IsEnabled = storeCanBack || _backStack.Count > 0;
     }
 
     private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
@@ -175,6 +321,45 @@ public partial class MainWindow : Window
         => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
+
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        if (!App.IsExiting && !App.IsSmokeTest && AppSettings.Current.CloseToTray)
+        {
+            e.Cancel = true;
+            AppServices.Tray?.EnsureVisible();
+            Hide();
+
+            if (!_trayHintShown)
+            {
+                _trayHintShown = true;
+                AppServices.Tray?.ShowNotification(
+                    AppServices.AppName,
+                    "O Klyra Optimizer continua ativo na bandeja do sistema.");
+            }
+            return;
+        }
+
+        base.OnClosing(e);
+    }
+
+    public void RestoreFromTray()
+    {
+        if (!IsVisible)
+        {
+            Show();
+        }
+
+        if (WindowState == WindowState.Minimized)
+        {
+            WindowState = WindowState.Normal;
+        }
+
+        Activate();
+        Topmost = true;
+        Topmost = false;
+        Focus();
+    }
 
     private void SyncNavSelection(string key)
     {
@@ -200,9 +385,10 @@ public partial class MainWindow : Window
         }
     }
 
-    public void Navigate(string key, bool pushHistory = true)
+    public void Navigate(string key, bool pushHistory = true, bool animate = true)
     {
         if (PageHost == null) return;
+        if (PageHost.Content != null && _current == key && pushHistory && !_suppressHistory) return;
 
         if (pushHistory && !_suppressHistory && !string.IsNullOrEmpty(_current) && _current != key)
         {
@@ -223,16 +409,17 @@ public partial class MainWindow : Window
         SyncNavSelection(key);
         _suppressHistory = false;
 
+        if (animate)
+        {
+            Motion.PageIn(PageHost);
+        }
+
         if (page is IRefreshablePage refreshable)
         {
             refreshable.OnActivated();
         }
 
         UpdateBackButton();
-
-        Dispatcher.BeginInvoke(
-            new Action(() => Motion.PageIn(page)),
-            DispatcherPriority.Loaded);
     }
 
     private FrameworkElement? CreatePage(string key) => key switch
@@ -259,25 +446,78 @@ public partial class MainWindow : Window
         UpdatePaneElements();
     }
 
-    private void Elevate_Click(object sender, RoutedEventArgs e)
+    private async void Elevate_Click(object sender, RoutedEventArgs e)
     {
         if (Shell.RelaunchElevated("--elevated-launch"))
         {
-            Application.Current.Shutdown();
+            App.ExitCompletely();
         }
         else
         {
-            MessageBox.Show(
-                "Não foi possível solicitar a elevação. Feche o Klyra Optimizer e abra novamente com " +
-                "\"Executar como administrador\".",
+            await ShowModalDialogAsync(
                 AppServices.AppName,
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+                "Não foi possível solicitar a elevação automaticamente. Feche o Klyra Optimizer e abra novamente com \"Executar como administrador\".",
+                "Entendi",
+                null,
+                false);
         }
     }
 
     // ------------------------------------------------------------------
-    // Teste automatizado de construcao das telas (usado em build/CI)
+    // ContentDialog Modal Global (Windows 10 UWP 1809)
+    // ------------------------------------------------------------------
+    public Task<bool> ShowModalDialogAsync(
+        string title,
+        string content,
+        string primaryText,
+        string? closeText,
+        bool isDanger)
+    {
+        _dialogTcs?.TrySetResult(false);
+        var tcs = new TaskCompletionSource<bool>();
+        _dialogTcs = tcs;
+
+        GlobalDialogTitle.Text = title;
+        GlobalDialogBody.Text = content;
+        GlobalDialogPrimaryBtn.Content = primaryText;
+        GlobalDialogPrimaryBtn.Style = (Style)FindResource(isDanger ? "Btn.Danger" : "Btn.Accent");
+
+        if (string.IsNullOrWhiteSpace(closeText))
+        {
+            GlobalDialogCloseBtn.Visibility = Visibility.Collapsed;
+            GlobalDialogButtonsGrid.Columns = 1;
+            GlobalDialogPrimaryBtn.Margin = new Thickness(0);
+        }
+        else
+        {
+            GlobalDialogCloseBtn.Content = closeText;
+            GlobalDialogCloseBtn.Visibility = Visibility.Visible;
+            GlobalDialogButtonsGrid.Columns = 2;
+            GlobalDialogPrimaryBtn.Margin = new Thickness(0, 0, 4, 0);
+        }
+
+        Motion.ShowOverlay(GlobalDialogOverlay);
+        return tcs.Task;
+    }
+
+    private void GlobalDialogPrimary_Click(object sender, RoutedEventArgs e)
+    {
+        Motion.HideOverlay(GlobalDialogOverlay);
+        var tcs = _dialogTcs;
+        _dialogTcs = null;
+        tcs?.TrySetResult(true);
+    }
+
+    private void GlobalDialogClose_Click(object sender, RoutedEventArgs e)
+    {
+        Motion.HideOverlay(GlobalDialogOverlay);
+        var tcs = _dialogTcs;
+        _dialogTcs = null;
+        tcs?.TrySetResult(false);
+    }
+
+    // ------------------------------------------------------------------
+    // Smoke test automatizado
     // ------------------------------------------------------------------
     public void RunSmokeTest(string resultFile)
     {
@@ -297,14 +537,14 @@ public partial class MainWindow : Window
                     CheckOverlay(report, PageHost.Content as FrameworkElement, "RebootOverlay");
                 }
 
-                // Testa tambem recolher e expandir o SplitView do Windows 10
+                CheckOverlay(report, this, "GlobalDialogOverlay");
+
                 Hamburger_Click(this, new RoutedEventArgs());
                 UpdateLayout();
                 Hamburger_Click(this, new RoutedEventArgs());
                 UpdateLayout();
                 report.AppendLine("OK: splitview");
 
-                // Testa Maximizar: garante que nao transborda a area util (rcWork / barra de tarefas)
                 WindowState = WindowState.Maximized;
                 UpdateLayout();
                 Pump(120);
@@ -324,7 +564,7 @@ public partial class MainWindow : Window
                 try { File.WriteAllText(resultFile, report.ToString()); } catch { }
             }
 
-            Application.Current.Shutdown(0);
+            App.ExitCompletely();
         }), DispatcherPriority.ApplicationIdle);
     }
 
@@ -333,7 +573,7 @@ public partial class MainWindow : Window
         if (page?.FindName(name) is not FrameworkElement overlay) return;
 
         Motion.ShowOverlay(overlay);
-        Pump(380);
+        Pump(360);
 
         var card = overlay is Panel panel && panel.Children.Count > 0 ? panel.Children[0] as FrameworkElement : null;
         var scaleX = (card?.RenderTransform as ScaleTransform)?.ScaleX ?? 1;
@@ -347,7 +587,7 @@ public partial class MainWindow : Window
             : $"FALHA: {name} (abre) — visibility={overlay.Visibility} opacity={overlay.Opacity:0.00} escala={scaleX:0.00}");
 
         Motion.HideOverlay(overlay);
-        Pump(240);
+        Pump(220);
 
         report.AppendLine(overlay.Visibility == Visibility.Collapsed
             ? $"OK: {name} (fecha)"

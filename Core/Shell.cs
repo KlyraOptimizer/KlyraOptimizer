@@ -182,13 +182,32 @@ public static class Shell
 
     public static void Shutdown()
     {
-        try { Application.Current.Shutdown(); } catch { }
+        try { App.ExitCompletely(); } catch { }
     }
 
     /// <summary>
     /// Verifica privilegios e, se necessario, oferece reiniciar elevado.
     /// Devolve false quando a acao deve ser interrompida.
     /// </summary>
+    public static async Task<bool> RequireAdminAsync()
+    {
+        if (IsAdmin) return true;
+
+        var elevate = await AppServices.ShowDialogAsync(
+            "Privilégios de administrador necessários",
+            "Esta operação modifica chaves de registro, serviços ou configurações de boot do Windows e exige execução como Administrador.\n\n" +
+            "Deseja reiniciar o Klyra Optimizer com privilégios elevados agora?",
+            primaryButtonText: "Reiniciar como Administrador",
+            closeButtonText: "Cancelar");
+
+        if (elevate && RelaunchElevated("--elevated-launch"))
+        {
+            Shutdown();
+        }
+
+        return false;
+    }
+
     public static bool RequireAdmin()
     {
         if (IsAdmin) return true;

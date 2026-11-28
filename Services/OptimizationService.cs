@@ -36,7 +36,7 @@ public sealed class OptimizerOptions
 
     public bool DisableBluetooth { get; set; }
 
-    public bool CreateRestorePoint { get; set; } = true;
+    public int MenuShowDelayMs { get; set; } = 50;
 
     public string ModeName => Mode switch
     {
@@ -193,7 +193,8 @@ public sealed class OptimizationService
         Set(@"HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Power", "HiberbootEnabled", 0, "Desativar Fast Startup");
         _engine.RunTool("powercfg.exe", "-h off", "Desativar Hibernação (libera espaço em disco)");
         SetString(@"HKCU\Control Panel\Desktop", "AutoEndTasks", "1", "Fechar Apps Travados Automaticamente");
-        SetString(@"HKCU\Control Panel\Desktop", "MenuShowDelay", "50", "Reduzir Delay de Menus (50 ms)");
+        var delayMs = Math.Clamp(options.MenuShowDelayMs, 0, 400);
+        SetString(@"HKCU\Control Panel\Desktop", "MenuShowDelay", delayMs.ToString(), $"Reduzir Delay de Menus ({delayMs} ms)");
         Set(@"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "HideFileExt", 0, "Mostrar Extensões de Arquivos");
 
         ct.ThrowIfCancellationRequested();
@@ -209,8 +210,13 @@ public sealed class OptimizationService
 
         _engine.RunTool("netsh.exe", "int tcp set global rss=enabled", "TCP RSS habilitado");
         _engine.RunTool("netsh.exe", "int tcp set global timestamps=disabled", "Desativar TCP timestamps");
-        _engine.RunTool("netsh.exe", "int tcp set global nonsackrttresiliency=disabled", "Desativar NonSACK RTT resiliency");
-        _engine.RunTool("netsh.exe", "interface isatap set state disabled", "Desativar tunel ISATAP");
+        _engine.RunTool("netsh.exe", "int tcp set global nonsackrttresiliency=disabled", "Desativar NonSACK RTT resiliency", ignoreNonZeroExit: true);
+        _engine.RunTool("netsh.exe", "interface isatap set state disabled", "Desativar tunel ISATAP", ignoreNonZeroExit: true);
+
+        foreach (var activeSvc in new[] { "DiagTrack", "dmwappushservice", "WerSvc", "SysMain", "NvTelemetryContainer" })
+        {
+            _engine.StopService(activeSvc);
+        }
 
         foreach (var service in new[]
                  {
@@ -232,7 +238,7 @@ $apps = @('Microsoft.BingNews','Microsoft.BingWeather','Microsoft.GetHelp','Micr
           'Microsoft.SkypeApp','Clipchamp.Clipchamp','Microsoft.Copilot');
 $n = 0;
 foreach ($a in $apps) {
-    $p = Get-AppxPackage -Name $a -ErrorAction SilentlyContinue;
+    $p = Get-AppxPackage -Name ""*$a*"" -ErrorAction SilentlyContinue;
     if ($p) { $p | Remove-AppxPackage -ErrorAction SilentlyContinue; $n++ }
 }
 Write-Output ('   Pacotes AppX removidos: ' + $n)";
@@ -378,7 +384,7 @@ Write-Output ('   Pacotes AppX removidos: ' + $n)";
             var current = _system.ActiveMode;
             _log.Phase($"TROCANDO MODO: {(current == ActiveMode.None ? "nenhum" : current.ToString())} -> {target}");
 
-            var options = new OptimizerOptions { Mode = target, CreateRestorePoint = false };
+            var options = new OptimizerOptions { Mode = target };
 
             switch (target)
             {
@@ -548,7 +554,7 @@ Write-Output ('   Pacotes AppX removidos: ' + $n)";
         if (!storePresent)
         {
             _log.Write("   [*] Microsoft Store não encontrada - reinstalando (wsreset -i)...", LogKind.Info);
-            Shell.Open("wsreset.exe");
+            Shell.Run("wsreset.exe", "-i", 30000);
         }
     }
 
@@ -595,7 +601,6 @@ Write-Output ('   Pacotes AppX removidos: ' + $n)";
                     _engine.SetServiceStart("InstallService", 3);
                     _engine.SetServiceStart("PushToInstall", 3);
                     _engine.RemoveValue(@"HKLM\SOFTWARE\Policies\Microsoft\WindowsStore", "RemoveWindowsStore", "Microsoft Store Oficial liberada");
-                    Shell.Open("wsreset.exe");
                 }
 
                 break;
@@ -715,15 +720,38 @@ Write-Output ('   Pacotes AppX removidos: ' + $n)";
     {
         return id switch
         {
-            ToggleId.WindowsUpdate => TweakEngine.ReadInt($@"{ServicesKey}\wuauserv", "Start") == 4,
-            ToggleId.MicrosoftStore => TweakEngine.ReadInt($@"{ServicesKey}\InstallService", "Start") == 4,
-            ToggleId.Bluetooth => TweakEngine.ReadInt($@"{ServicesKey}\bthserv", "Start") == 4,
-            ToggleId.GameDvr => TweakEngine.ReadInt(@"HKCU\System\GameConfigStore", "GameDVR_Enabled") == 0,
-            ToggleId.Copilot => TweakEngine.ReadInt(@"HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot", "TurnOffWindowsCopilot") == 1,
-            ToggleId.Transparency => TweakEngine.ReadInt(@"HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "EnableTransparency") == 0,
-            ToggleId.SysMain => TweakEngine.ReadInt($@"{ServicesKey}\SysMain", "Start") == 4,
-            ToggleId.VbsHvci => TweakEngine.ReadInt(@"HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard", "EnableVirtualizationBasedSecurity") == 0,
-            ToggleId.Hibernation => !File.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "hiberfil.sys")),
+            ToggleId.WindowsUpdate =>
+                TweakEngine.ReadInt($@"{ServicesKey}\wuauserv", "Start") == 4 ||
+                TweakEngine.ReadInt(@"HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU", "NoAutoUpdate") == 1,
+
+            ToggleId.MicrosoftStore =>
+                TweakEngine.ReadInt($@"{ServicesKey}\InstallService", "Start") == 4 ||
+                TweakEngine.ReadInt(@"HKLM\SOFTWARE\Policies\Microsoft\WindowsStore", "RemoveWindowsStore") == 1,
+
+            ToggleId.Bluetooth =>
+                TweakEngine.ReadInt($@"{ServicesKey}\bthserv", "Start") == 4,
+
+            ToggleId.GameDvr =>
+                TweakEngine.ReadInt(@"HKCU\System\GameConfigStore", "GameDVR_Enabled") == 0,
+
+            ToggleId.Copilot =>
+                TweakEngine.ReadInt(@"HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot", "TurnOffWindowsCopilot") == 1 ||
+                TweakEngine.ReadInt(@"HKCU\Software\Policies\Microsoft\Windows\WindowsCopilot", "TurnOffWindowsCopilot") == 1,
+
+            ToggleId.Transparency =>
+                TweakEngine.ReadInt(@"HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "EnableTransparency") == 0,
+
+            ToggleId.SysMain =>
+                TweakEngine.ReadInt($@"{ServicesKey}\SysMain", "Start") == 4 ||
+                TweakEngine.ReadInt(Prefetch, "EnableSuperfetch") == 0,
+
+            ToggleId.VbsHvci =>
+                TweakEngine.ReadInt(@"HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard", "EnableVirtualizationBasedSecurity") == 0,
+
+            ToggleId.Hibernation =>
+                TweakEngine.ReadInt(@"HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Power", "HiberbootEnabled") == 0 &&
+                TweakEngine.ReadInt(@"HKLM\SYSTEM\CurrentControlSet\Control\Power", "HibernateEnabled") != 1,
+
             _ => false
         };
     }

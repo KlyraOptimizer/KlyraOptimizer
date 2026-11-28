@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using KlyraOptimizer.Core;
 using KlyraOptimizer.Services;
 
@@ -12,11 +13,19 @@ namespace KlyraOptimizer.Views;
 public partial class StorePage : UserControl, IRefreshablePage
 {
     private readonly Action? _onNavigationStateChanged;
+    private readonly DispatcherTimer _connectivityTimer;
     private readonly List<StoreApp> _heroApps = new();
     private StoreApp? _selected;
+    private InstalledAppInfo? _selectedInstalledInfo;
+    private CancellationTokenSource? _detailCheckCts;
     private StoreApp? _currentHero;
+    private List<StoreApp> _lastResults = new();
+    private string _lastQuery = string.Empty;
     private bool _busy;
     private bool _showcaseLoaded;
+    private bool _checkingNet;
+    private bool _isOnline = true;
+    private string _activeViewMode = "showcase";
     private string _returnMode = "showcase"; // "showcase" ou "results"
 
     public StorePage() : this(null) { }
@@ -26,12 +35,24 @@ public partial class StorePage : UserControl, IRefreshablePage
         _onNavigationStateChanged = onNavigationStateChanged;
         InitializeComponent();
 
+        _connectivityTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromSeconds(5)
+        };
+        _connectivityTimer.Tick += async (_, _) => await CheckConnectivitySilentAsync();
+
         Loaded += (_, _) =>
         {
             AppServices.Winget.Progress -= OnWingetProgress;
             AppServices.Winget.Progress += OnWingetProgress;
+            _connectivityTimer.Start();
+            _ = CheckConnectivitySilentAsync();
         };
-        Unloaded += (_, _) => AppServices.Winget.Progress -= OnWingetProgress;
+        Unloaded += (_, _) =>
+        {
+            AppServices.Winget.Progress -= OnWingetProgress;
+            _connectivityTimer.Stop();
+        };
     }
 
     /// <summary>Permite que o botao Voltar da barra de titulo retorne dentro da propria Loja.</summary>
@@ -51,14 +72,71 @@ public partial class StorePage : UserControl, IRefreshablePage
 
     public async void OnActivated()
     {
+        _connectivityTimer.Start();
+        _ = AppServices.Winget.WarmInstalledCacheAsync();
         await Task.Run(() => AppServices.System.RefreshWinget());
         UpdateWingetState();
 
-        if (!_showcaseLoaded)
+        await CheckConnectivitySilentAsync();
+    }
+
+    private async void RetryConnection_Click(object sender, RoutedEventArgs e)
+    {
+        await CheckConnectivitySilentAsync();
+    }
+
+    /// <summary>
+    /// Verifica silenciosamente a Internet ao abrir a aba e a cada 5 segundos (sem gravar em logs).
+    /// Quando a conexao retorna, recarrega automaticamente a vitrine ou a ultima pesquisa pendente.
+    /// </summary>
+    private async Task CheckConnectivitySilentAsync()
+    {
+        if (_checkingNet) return;
+        _checkingNet = true;
+
+        try
         {
-            _showcaseLoaded = true;
-            await LoadShowcaseAsync();
+            var online = await AppServices.Store.CheckInternetSilentAsync();
+            _isOnline = online;
+
+            if (!online)
+            {
+                if (!_showcaseLoaded || (_activeViewMode == "results" && _lastResults.Count == 0))
+                {
+                    OfflineView.Visibility = Visibility.Visible;
+                    ShowcaseView.Visibility = Visibility.Collapsed;
+                    ResultsView.Visibility = Visibility.Collapsed;
+                    DetailView.Visibility = Visibility.Collapsed;
+                }
+                return;
+            }
+
+            if (OfflineView.Visibility == Visibility.Visible)
+            {
+                OfflineView.Visibility = Visibility.Collapsed;
+                RestoreCurrentViewVisibility();
+            }
+
+            if (!_showcaseLoaded && !_busy)
+            {
+                await LoadShowcaseAsync();
+            }
+            else if (_activeViewMode == "results" && _lastResults.Count == 0 && !string.IsNullOrWhiteSpace(_lastQuery) && !_busy)
+            {
+                await SearchAndShowAsync(_lastQuery, ResultsHeader.Text);
+            }
         }
+        finally
+        {
+            _checkingNet = false;
+        }
+    }
+
+    private void RestoreCurrentViewVisibility()
+    {
+        ShowcaseView.Visibility = _activeViewMode == "showcase" ? Visibility.Visible : Visibility.Collapsed;
+        ResultsView.Visibility = _activeViewMode == "results" ? Visibility.Visible : Visibility.Collapsed;
+        DetailView.Visibility = _activeViewMode == "detail" ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnWingetProgress(string message)
@@ -82,6 +160,18 @@ public partial class StorePage : UserControl, IRefreshablePage
 
     private void ShowView(string mode, bool drillIn = false, bool drillOut = false)
     {
+        _activeViewMode = mode;
+        if (!_isOnline && !_showcaseLoaded)
+        {
+            OfflineView.Visibility = Visibility.Visible;
+            ShowcaseView.Visibility = Visibility.Collapsed;
+            ResultsView.Visibility = Visibility.Collapsed;
+            DetailView.Visibility = Visibility.Collapsed;
+            _onNavigationStateChanged?.Invoke();
+            return;
+        }
+
+        OfflineView.Visibility = Visibility.Collapsed;
         ShowcaseView.Visibility = mode == "showcase" ? Visibility.Visible : Visibility.Collapsed;
         ResultsView.Visibility = mode == "results" ? Visibility.Visible : Visibility.Collapsed;
         DetailView.Visibility = mode == "detail" ? Visibility.Visible : Visibility.Collapsed;
@@ -115,6 +205,18 @@ public partial class StorePage : UserControl, IRefreshablePage
 
             var essentials = essentialTask.Result;
             var productivity = prodTask.Result;
+
+            if (essentials.Count == 0 && productivity.Count == 0)
+            {
+                _showcaseLoaded = false;
+                OfflineView.Visibility = Visibility.Visible;
+                ShowcaseView.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            _showcaseLoaded = true;
+            OfflineView.Visibility = Visibility.Collapsed;
+            if (_activeViewMode == "showcase") ShowcaseView.Visibility = Visibility.Visible;
 
             EssentialRow.ItemsSource = essentials;
             ProductivityRow.ItemsSource = productivity;
@@ -268,7 +370,9 @@ public partial class StorePage : UserControl, IRefreshablePage
         try
         {
             var items = await AppServices.Store.GetProductsByIdsAsync(ids, CancellationToken.None);
-            ResultsGrid.ItemsSource = items;
+            _lastQuery = string.Empty;
+            _lastResults = items;
+            ApplyResultSorting();
             ResultsStatus.Text = $"{items.Count} aplicativos disponíveis gratuitamente";
             _ = HydrateLogosAsync(items);
         }
@@ -294,6 +398,32 @@ public partial class StorePage : UserControl, IRefreshablePage
     // ------------------------------------------------------------------
     // Pesquisa
     // ------------------------------------------------------------------
+    public void RunExternalSearch(string query)
+    {
+        SearchBox.Text = query;
+        _ = SearchAndShowAsync(query, $"Resultados para \"{query.Trim()}\"");
+    }
+
+    private void SortCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ResultsGrid == null || _lastResults.Count == 0) return;
+        ApplyResultSorting();
+    }
+
+    private void ApplyResultSorting()
+    {
+        var sortTag = (SortCombo?.SelectedItem as ComboBoxItem)?.Tag as string ?? "relevance";
+        IEnumerable<StoreApp> sorted = sortTag switch
+        {
+            "rating" => _lastResults.OrderByDescending(r => r.Rating).ThenByDescending(r => r.RatingCount),
+            "name" => _lastResults.OrderBy(r => r.Title),
+            _ => _lastResults
+                .OrderByDescending(r => !string.IsNullOrEmpty(_lastQuery) && r.Title.StartsWith(_lastQuery, StringComparison.OrdinalIgnoreCase))
+                .ThenBy(r => r.Title)
+        };
+        ResultsGrid.ItemsSource = sorted.ToList();
+    }
+
     private void Search_Click(object sender, RoutedEventArgs e)
         => _ = SearchAndShowAsync(SearchBox.Text, $"Resultados para \"{SearchBox.Text.Trim()}\"");
 
@@ -310,8 +440,24 @@ public partial class StorePage : UserControl, IRefreshablePage
         if (_busy || string.IsNullOrWhiteSpace(query)) return;
 
         query = query.Trim();
+        _lastQuery = query;
         _returnMode = "results";
         ResultsHeader.Text = heading;
+
+        if (!await AppServices.Store.CheckInternetSilentAsync())
+        {
+            _isOnline = false;
+            _activeViewMode = "results";
+            _lastResults.Clear();
+            OfflineView.Visibility = Visibility.Visible;
+            ShowcaseView.Visibility = Visibility.Collapsed;
+            ResultsView.Visibility = Visibility.Collapsed;
+            DetailView.Visibility = Visibility.Collapsed;
+            _onNavigationStateChanged?.Invoke();
+            return;
+        }
+
+        _isOnline = true;
         ResultsStatus.Text = "Consultando a Microsoft Store...";
         EmptyResults.Visibility = Visibility.Collapsed;
         ResultsGrid.ItemsSource = null;
@@ -324,12 +470,11 @@ public partial class StorePage : UserControl, IRefreshablePage
         {
             var results = await AppServices.Store.SearchAsync(query, CancellationToken.None);
 
-            var ordered = results
-                .OrderByDescending(r => r.Title.StartsWith(query, StringComparison.OrdinalIgnoreCase))
-                .ThenBy(r => r.Title)
-                .ToList();
+            _lastQuery = query;
+            _lastResults = results;
+            ApplyResultSorting();
+            var ordered = (ResultsGrid.ItemsSource as List<StoreApp>) ?? results;
 
-            ResultsGrid.ItemsSource = ordered;
             EmptyResults.Visibility = ordered.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             ResultsStatus.Text = ordered.Count == 0
                 ? "Nenhum resultado encontrado"
@@ -373,7 +518,13 @@ public partial class StorePage : UserControl, IRefreshablePage
 
     private async Task OpenProductAsync(StoreApp app)
     {
+        _detailCheckCts?.Cancel();
+        var checkCts = new CancellationTokenSource();
+        _detailCheckCts = checkCts;
+        var ct = checkCts.Token;
+
         _selected = app;
+        _selectedInstalledInfo = null;
         DetailView.ScrollToHome();
         ShowView("detail", drillIn: true);
 
@@ -409,16 +560,23 @@ public partial class StorePage : UserControl, IRefreshablePage
         MetaVersion.Text = "—";
         MetaProductId.Text = app.ProductId;
 
-        InstallButton.Content = "Obter";
-        InstallButton.IsEnabled = true;
+        ApplyInstalledUiState(isInstalled: false);
         InstallProgressPanel.Visibility = Visibility.Collapsed;
-        InstallStatus.Text = "Instalação silenciosa via winget (sem conta Microsoft).";
+
+        // Dispara verificacao silenciosa imediata em segundo plano
+        _ = VerifyProductInstalledAsync(app, ct);
 
         SetBusy(true);
         try
         {
-            var details = await AppServices.Store.GetDetailsAsync(app.ProductId, CancellationToken.None);
-            if (_selected != app) return;
+            var details = await AppServices.Store.GetDetailsAsync(app.ProductId, ct);
+            if (_selected != app || ct.IsCancellationRequested) return;
+
+            if (string.IsNullOrWhiteSpace(app.PackageFamilyName) && !string.IsNullOrWhiteSpace(details.PackageFamilyName))
+            {
+                app.PackageFamilyName = details.PackageFamilyName;
+                _ = VerifyProductInstalledAsync(app, ct);
+            }
 
             DetailDescription.Text = details.Description;
 
@@ -484,6 +642,9 @@ public partial class StorePage : UserControl, IRefreshablePage
                 if (shots.Count == 0) ScreenshotsSection.Visibility = Visibility.Collapsed;
             }
         }
+        catch (OperationCanceledException)
+        {
+        }
         catch (Exception ex)
         {
             AppServices.Log.Write($"[LOJA] Detalhes de {app.ProductId} falharam: {ex.Message}", LogKind.Warning);
@@ -494,8 +655,50 @@ public partial class StorePage : UserControl, IRefreshablePage
         }
     }
 
+    private async Task VerifyProductInstalledAsync(StoreApp app, CancellationToken ct)
+    {
+        try
+        {
+            var info = await AppServices.Winget.CheckInstalledAsync(app.ProductId, app.Title, app.PackageFamilyName, ct);
+            if (ct.IsCancellationRequested || _selected != app) return;
+
+            _selectedInstalledInfo = info.IsInstalled ? info : null;
+            if (!_busy || InstallProgressPanel.Visibility != Visibility.Visible)
+            {
+                ApplyInstalledUiState(info.IsInstalled);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            AppServices.Log.Write($"[LOJA] Falha ao verificar instalacao de {app.ProductId}: {ex.Message}", LogKind.Warning);
+        }
+    }
+
+    private void ApplyInstalledUiState(bool isInstalled, string? customStatus = null)
+    {
+        if (isInstalled)
+        {
+            InstallButton.Visibility = Visibility.Collapsed;
+            InstalledActionsPanel.Visibility = Visibility.Visible;
+            OpenAppButton.IsEnabled = true;
+            UninstallAppButton.IsEnabled = true;
+            InstallStatus.Text = customStatus ?? "Este aplicativo já está instalado neste computador.";
+        }
+        else
+        {
+            InstalledActionsPanel.Visibility = Visibility.Collapsed;
+            InstallButton.Visibility = Visibility.Visible;
+            InstallButton.Content = "Obter";
+            InstallButton.IsEnabled = true;
+            InstallStatus.Text = customStatus ?? "Instalação silenciosa via winget (sem conta Microsoft).";
+        }
+    }
+
     // ------------------------------------------------------------------
-    // Instalacao em segundo plano via winget
+    // Instalacao, Abertura e Desinstalacao em segundo plano
     // ------------------------------------------------------------------
     private async void Install_Click(object sender, RoutedEventArgs e)
     {
@@ -520,23 +723,30 @@ public partial class StorePage : UserControl, IRefreshablePage
         {
             var success = await AppServices.Winget.InstallFromStoreAsync(app.ProductId, CancellationToken.None);
 
-            if (_selected == app)
-            {
-                InstallButton.Content = success ? "Instalado" : "Tentar novamente";
-                InstallStatus.Text = success
-                    ? $"✓ {app.Title} instalado com sucesso neste computador."
-                    : $"Não foi possível concluir a instalação de {app.Title} (detalhes registrados nos logs).";
-            }
-
             if (success)
             {
                 AppServices.Log.Write($"[LOJA] {app.Title} ({app.ProductId}) instalado.", LogKind.Applied);
+                var info = await AppServices.Winget.CheckInstalledAsync(app.ProductId, app.Title, app.PackageFamilyName);
+                if (_selected == app)
+                {
+                    _selectedInstalledInfo = info;
+                    ApplyInstalledUiState(isInstalled: true, $"✓ {app.Title} instalado com sucesso.");
+                }
+            }
+            else if (_selected == app)
+            {
+                ApplyInstalledUiState(
+                    isInstalled: false,
+                    $"Não foi possível concluir a instalação de {app.Title} (detalhes registrados nos logs).");
+                InstallButton.Content = "Tentar novamente";
             }
         }
         catch (Exception ex)
         {
-            InstallButton.Content = "Obter";
-            InstallStatus.Text = "Erro durante a instalação: " + ex.Message;
+            if (_selected == app)
+            {
+                ApplyInstalledUiState(isInstalled: false, "Erro durante a instalação: " + ex.Message);
+            }
             AppServices.Log.Write($"[LOJA] Erro instalando {app.ProductId}: {ex.Message}", LogKind.Failed);
         }
         finally
@@ -544,6 +754,83 @@ public partial class StorePage : UserControl, IRefreshablePage
             SetBusy(false);
             InstallProgressPanel.Visibility = Visibility.Collapsed;
             InstallButton.IsEnabled = true;
+        }
+    }
+
+    private async void OpenApp_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selected == null) return;
+        var app = _selected;
+
+        InstallStatus.Text = $"Abrindo {app.Title}...";
+        var opened = await AppServices.Winget.LaunchInstalledAsync(
+            app.ProductId,
+            app.Title,
+            app.PackageFamilyName,
+            _selectedInstalledInfo);
+
+        if (_selected == app)
+        {
+            InstallStatus.Text = opened
+                ? $"{app.Title} iniciado."
+                : $"Não foi possível localizar o atalho de abertura automática de {app.Title}. Abra pelo Menu Iniciar.";
+        }
+    }
+
+    private async void UninstallApp_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selected == null || _busy) return;
+        var app = _selected;
+
+        var confirmed = await AppServices.ShowDialogAsync(
+            $"Desinstalar {app.Title}?",
+            $"O aplicativo \"{app.Title}\" e seus pacotes associados serão removidos deste computador.",
+            primaryButtonText: "Desinstalar",
+            closeButtonText: "Cancelar");
+
+        if (!confirmed || _selected != app) return;
+
+        SetBusy(true);
+        OpenAppButton.IsEnabled = false;
+        UninstallAppButton.IsEnabled = false;
+        InstallProgressPanel.Visibility = Visibility.Visible;
+        InstallStatus.Text = $"Desinstalando {app.Title} em segundo plano...";
+
+        try
+        {
+            var removed = await AppServices.Winget.UninstallAsync(
+                app.ProductId,
+                app.Title,
+                _selectedInstalledInfo,
+                CancellationToken.None);
+
+            var recheck = await AppServices.Winget.CheckInstalledAsync(app.ProductId, app.Title, app.PackageFamilyName);
+            var stillInstalled = !removed && recheck.IsInstalled;
+
+            if (_selected == app)
+            {
+                _selectedInstalledInfo = stillInstalled ? recheck : null;
+                ApplyInstalledUiState(
+                    isInstalled: stillInstalled,
+                    stillInstalled
+                        ? $"Não foi possível concluir a desinstalação automática de {app.Title}."
+                        : $"✓ {app.Title} foi desinstalado deste computador.");
+            }
+        }
+        catch (Exception ex)
+        {
+            if (_selected == app)
+            {
+                OpenAppButton.IsEnabled = true;
+                UninstallAppButton.IsEnabled = true;
+                InstallStatus.Text = "Erro durante a desinstalação: " + ex.Message;
+            }
+            AppServices.Log.Write($"[LOJA] Erro desinstalando {app.ProductId}: {ex.Message}", LogKind.Failed);
+        }
+        finally
+        {
+            SetBusy(false);
+            InstallProgressPanel.Visibility = Visibility.Collapsed;
         }
     }
 

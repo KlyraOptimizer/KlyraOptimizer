@@ -1,6 +1,7 @@
 ﻿<UserControl x:Class="KlyraOptimizer.Views.StorePage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:core="clr-namespace:KlyraOptimizer.Core"
              xmlns:views="clr-namespace:KlyraOptimizer.Views"
              Background="Transparent"
              FontFamily="{StaticResource Font.Ui}">
@@ -128,30 +129,39 @@
                                  Style="{StaticResource Pivot.Tab}" Margin="0" Tag="dev" Click="Pivot_Click" />
                 </StackPanel>
 
-                <!-- Caixa de pesquisa quadrada com lupa embutida (canto superior direito como na Win10 Store) -->
-                <Grid Grid.Column="2" Width="310" VerticalAlignment="Center" Margin="16,0,0,8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="34" />
-                    </Grid.ColumnDefinitions>
-                    <TextBox x:Name="SearchBox"
-                             Grid.Column="0" Grid.ColumnSpan="2"
-                             Height="32"
-                             Padding="10,4,36,4"
-                             Style="{StaticResource Input.Win10}"
-                             Tag="Pesquisar"
-                             KeyDown="SearchBox_KeyDown" />
-                    <Button Grid.Column="1"
-                            Width="32" Height="28"
-                            Margin="0,0,2,0"
-                            Style="{StaticResource Btn.Subtle}"
-                            Padding="0"
-                            ToolTip="Pesquisar na Microsoft Store"
-                            Click="Search_Click">
-                        <TextBlock Text="&#xE721;" FontFamily="{StaticResource Font.Icons}" FontSize="13"
-                                   Foreground="{DynamicResource App.TextSecondary}" />
-                    </Button>
-                </Grid>
+                <!-- Caixa de pesquisa quadrada com botao X nativo + lupa em colunas separadas -->
+                <Border Grid.Column="2" Width="320" VerticalAlignment="Center" Margin="16,0,0,8"
+                        Background="{DynamicResource App.InputBackground}"
+                        BorderBrush="{DynamicResource App.InputStroke}"
+                        BorderThickness="1"
+                        CornerRadius="0">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="34" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="SearchBox"
+                                 Grid.Column="0"
+                                 Height="30"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 Padding="10,4,4,4"
+                                 Style="{StaticResource Input.Win10}"
+                                 Tag="Pesquisar aplicativos e jogos"
+                                 KeyDown="SearchBox_KeyDown" />
+                        <Button Grid.Column="1"
+                                Width="34" Height="30"
+                                Style="{StaticResource Btn.Subtle}"
+                                core:FluentEffects.EnableTilt="False"
+                                BorderThickness="0"
+                                Padding="0"
+                                ToolTip="Pesquisar na Microsoft Store"
+                                Click="Search_Click">
+                            <TextBlock Text="&#xE721;" FontFamily="{StaticResource Font.Icons}" FontSize="13"
+                                       Foreground="{DynamicResource App.TextSecondary}" />
+                        </Button>
+                    </Grid>
+                </Border>
             </Grid>
         </Border>
 
@@ -356,14 +366,22 @@
                         <TextBlock x:Name="ResultsHeader" Text="Resultados" Style="{StaticResource Text.PageTitle}" FontSize="24" />
                         <TextBlock x:Name="ResultsStatus" Text="Consultando catálogo..." Style="{StaticResource Text.Caption}" Margin="0,4,0,0" />
                     </StackPanel>
-                    <Button Grid.Column="1" Style="{StaticResource Btn.Standard}" VerticalAlignment="Center"
-                            Click="BackToHome_Click">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE72B;" FontFamily="{StaticResource Font.Icons}" FontSize="11"
-                                       VerticalAlignment="Center" Margin="0,0,8,0" />
-                            <TextBlock Text="Voltar à Página Inicial" FontSize="13" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <ComboBox x:Name="SortCombo" Width="186" SelectedIndex="0" Margin="0,0,8,0"
+                                  SelectionChanged="SortCombo_SelectionChanged">
+                            <ComboBoxItem Content="Ordenar: Relevância" Tag="relevance" />
+                            <ComboBoxItem Content="Ordenar: Melhor avaliação" Tag="rating" />
+                            <ComboBoxItem Content="Ordenar: Nome (A–Z)" Tag="name" />
+                        </ComboBox>
+                        <Button Style="{StaticResource Btn.Standard}" VerticalAlignment="Center"
+                                Click="BackToHome_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE72B;" FontFamily="{StaticResource Font.Icons}" FontSize="11"
+                                           VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <TextBlock Text="Página Inicial" FontSize="13" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
                 </Grid>
 
                 <ItemsControl x:Name="ResultsGrid" ItemTemplate="{StaticResource Win10StoreCardTemplate}">
@@ -491,19 +509,46 @@
                                                Foreground="{DynamicResource App.Text}" Margin="0,12,0,0" />
                                 </StackPanel>
 
-                                <!-- Coluna de acao "Obter / Instalar" igual ao botao azul largo da Loja Win10 -->
-                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Width="220">
+                                <!-- Coluna de acao: "Obter" ou "Abrir (azul) + Desinstalar (cinza)" quando instalado -->
+                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Width="252">
                                     <Button x:Name="InstallButton"
                                             Content="Obter"
                                             Style="{StaticResource Btn.Accent}"
-                                            Height="40"
-                                            FontSize="15"
+                                            Height="38"
+                                            FontSize="14"
                                             FontWeight="SemiBold"
                                             HorizontalAlignment="Stretch"
                                             Click="Install_Click" />
 
+                                    <Grid x:Name="InstalledActionsPanel" Visibility="Collapsed">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="8" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Button x:Name="OpenAppButton"
+                                                Grid.Column="0"
+                                                Content="Abrir"
+                                                Style="{StaticResource Btn.Accent}"
+                                                Height="38"
+                                                FontSize="14"
+                                                FontWeight="SemiBold"
+                                                Padding="12,0"
+                                                HorizontalAlignment="Stretch"
+                                                Click="OpenApp_Click" />
+                                        <Button x:Name="UninstallAppButton"
+                                                Grid.Column="2"
+                                                Content="Desinstalar"
+                                                Style="{StaticResource Btn.Standard}"
+                                                Height="38"
+                                                FontSize="14"
+                                                Padding="12,0"
+                                                HorizontalAlignment="Stretch"
+                                                Click="UninstallApp_Click" />
+                                    </Grid>
+
                                     <StackPanel x:Name="InstallProgressPanel" Visibility="Collapsed" Margin="0,10,0,0">
-                                        <views:Win10ProgressBar Height="5" Margin="0,0,0,6" />
+                                        <views:Win10ProgressBar Height="4" Margin="0,0,0,6" />
                                     </StackPanel>
 
                                     <TextBlock x:Name="InstallStatus"
@@ -579,5 +624,37 @@
                 </StackPanel>
             </Grid>
         </ScrollViewer>
+
+        <!-- =======================================================================
+             ESTADO SEM INTERNET (VERIFICACAO AUTOMATICA A CADA 5 SEGUNDOS)
+             ======================================================================= -->
+        <Border x:Name="OfflineView"
+                Grid.Row="3"
+                Background="{DynamicResource App.PageBackground}"
+                Visibility="Collapsed">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="460" Margin="32">
+                <TextBlock Text="&#xEB55;"
+                           Style="{StaticResource Icon}"
+                           FontSize="44"
+                           Foreground="{DynamicResource App.TextTertiary}"
+                           HorizontalAlignment="Center" />
+                <TextBlock Text="Você está sem conexão com a Internet"
+                           Style="{StaticResource Text.Subheader}"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center"
+                           Margin="0,16,0,6" />
+                <TextBlock Text="A Microsoft Store precisa de Internet para carregar o catálogo. Assim que a conexão voltar, a loja será carregada automaticamente."
+                           Style="{StaticResource Text.Body}"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center" />
+                <Button Content="Verificar conexão agora"
+                        Style="{StaticResource Btn.Accent}"
+                        Height="34"
+                        Padding="20,0"
+                        HorizontalAlignment="Center"
+                        Margin="0,20,0,0"
+                        Click="RetryConnection_Click" />
+            </StackPanel>
+        </Border>
     </Grid>
 </UserControl>

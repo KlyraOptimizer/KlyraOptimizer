@@ -7,11 +7,11 @@
 
     <Grid>
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Margin="36,16,36,36" MaxWidth="1100" HorizontalAlignment="Left">
+            <StackPanel Margin="32,20,32,36" MaxWidth="1100" HorizontalAlignment="Left">
 
                 <TextBlock Text="Klyra Tool" Style="{StaticResource Text.PageTitle}" />
                 <TextBlock Style="{StaticResource Text.PageSubtitle}"
-                           Text="Painel pós-otimização: troque de perfil, alterne recursos individuais do Windows ao vivo e execute manutenção rápida em segundo plano." />
+                           Text="Painel pós-otimização: troque de perfil, use chaves ToggleSwitch ao vivo em recursos individuais do Windows e execute manutenção rápida." />
 
                 <!-- ===================== MODO ATUAL ===================== -->
                 <Border Style="{StaticResource Card}" Margin="0,20,0,0">
@@ -24,7 +24,7 @@
                             </Grid.ColumnDefinitions>
 
                             <StackPanel VerticalAlignment="Center">
-                                <TextBlock Text="MODO ATIVO NO SISTEMA" Style="{StaticResource Text.Section}" Margin="0,0,0,3" />
+                                <TextBlock Text="PERFIL ATIVO NO SISTEMA" Style="{StaticResource Text.Section}" Margin="0,0,0,3" />
                                 <TextBlock x:Name="CurrentModeText" Text="Nenhum modo aplicado"
                                            FontSize="17" FontWeight="SemiBold"
                                            Foreground="{DynamicResource App.Text}" />
@@ -44,13 +44,13 @@
                     </StackPanel>
                 </Border>
 
-                <!-- ===================== FUNCOES AO VIVO ===================== -->
+                <!-- ===================== FUNCOES AO VIVO COM TOGGLESWITCH WIN10 ===================== -->
                 <Grid Margin="0,28,0,12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Text="Recursos individuais ao vivo" Style="{StaticResource Text.Subheader}" VerticalAlignment="Center" />
+                    <TextBlock Text="Otimizações individuais ao vivo (Ativado = Otimizado)" Style="{StaticResource Text.Subheader}" VerticalAlignment="Center" />
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                         <views:Win10ProgressRing x:Name="BusyRing" Width="20" Height="20" Visibility="Collapsed" Margin="0,0,8,0" />
                         <TextBlock x:Name="ActionStatus" Style="{StaticResource Text.Caption}" VerticalAlignment="Center" />
@@ -68,47 +68,34 @@
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
 
                                         <Border Width="34" Height="34"
                                                 Background="{DynamicResource App.ControlFill}"
+                                                BorderBrush="{DynamicResource App.CardStroke}"
+                                                BorderThickness="1"
+                                                CornerRadius="0"
                                                 VerticalAlignment="Center">
                                             <TextBlock Text="{Binding Glyph}" Style="{StaticResource Icon}" FontSize="15" />
                                         </Border>
 
-                                        <StackPanel Grid.Column="1" Margin="14,0,12,0" VerticalAlignment="Center">
+                                        <StackPanel Grid.Column="1" Margin="14,0,16,0" VerticalAlignment="Center">
                                             <TextBlock Text="{Binding Title}" Style="{StaticResource Text.CardTitle}" />
                                             <TextBlock Text="{Binding Description}" Style="{StaticResource Text.Caption}"
                                                        Margin="0,2,0,0" />
                                         </StackPanel>
 
-                                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"
-                                                    Margin="0,0,16,0">
-                                            <TextBlock x:Name="StateDot" Text="&#xE946;" FontFamily="{StaticResource Font.Icons}"
-                                                       FontSize="12" Foreground="{DynamicResource App.TextTertiary}"
-                                                       VerticalAlignment="Center" />
-                                            <TextBlock x:Name="StateLabel" Text="{Binding StateText}" FontSize="12"
-                                                       Foreground="{DynamicResource App.TextTertiary}"
-                                                       VerticalAlignment="Center" Margin="6,0,0,0" />
-                                        </StackPanel>
-
-                                        <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
-                                            <Button Content="Padrão" Tag="{Binding Id}" Style="{StaticResource Btn.SmallSubtle}"
-                                                    Margin="0,0,6,0" Click="ToggleDefault_Click" />
-                                            <Button Content="Otimizar" Tag="{Binding Id}" Style="{StaticResource Btn.Small}"
-                                                    Click="ToggleOptimize_Click" />
-                                        </StackPanel>
+                                        <CheckBox Grid.Column="2"
+                                                  Style="{StaticResource ToggleSwitch.Win10}"
+                                                  IsChecked="{Binding IsOptimized, Mode=OneWay}"
+                                                  Tag="{Binding}"
+                                                  VerticalAlignment="Center"
+                                                  Click="RowSwitch_Click" />
                                     </Grid>
                                 </StackPanel>
                                 <DataTemplate.Triggers>
                                     <DataTrigger Binding="{Binding (ItemsControl.AlternationIndex), RelativeSource={RelativeSource AncestorType=ContentPresenter}}" Value="0">
                                         <Setter TargetName="Sep" Property="Visibility" Value="Collapsed" />
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding IsOptimized}" Value="True">
-                                        <Setter TargetName="StateDot" Property="Text" Value="&#xE930;" />
-                                        <Setter TargetName="StateDot" Property="Foreground" Value="{DynamicResource App.SuccessText}" />
-                                        <Setter TargetName="StateLabel" Property="Foreground" Value="{DynamicResource App.SuccessText}" />
                                     </DataTrigger>
                                 </DataTemplate.Triggers>
                             </DataTemplate>
@@ -123,7 +110,7 @@
                     <Button Style="{StaticResource Btn.Tile}" Click="CleanRam_Click">
                         <StackPanel>
                             <TextBlock Text="&#xE74D;" Style="{StaticResource Icon}" FontSize="22"
-                                       HorizontalAlignment="Left" Foreground="{DynamicResource App.Accent}" />
+                                       HorizontalAlignment="Left" Foreground="{DynamicResource App.AccentText}" />
                             <TextBlock Text="Limpar RAM" Style="{StaticResource Text.CardTitle}" Margin="0,10,0,2" />
                             <TextBlock Text="Working set e temporários" Style="{StaticResource Text.Caption}" />
                         </StackPanel>
@@ -132,7 +119,7 @@
                     <Button Style="{StaticResource Btn.Tile}" Click="ResetNetwork_Click">
                         <StackPanel>
                             <TextBlock Text="&#xE895;" Style="{StaticResource Icon}" FontSize="22"
-                                       HorizontalAlignment="Left" Foreground="{DynamicResource App.Accent}" />
+                                       HorizontalAlignment="Left" Foreground="{DynamicResource App.AccentText}" />
                             <TextBlock Text="Reset de rede" Style="{StaticResource Text.CardTitle}" Margin="0,10,0,2" />
                             <TextBlock Text="Winsock, IP e DNS" Style="{StaticResource Text.Caption}" />
                         </StackPanel>
@@ -141,7 +128,7 @@
                     <Button Style="{StaticResource Btn.Tile}" Click="Reregister_Click">
                         <StackPanel>
                             <TextBlock Text="&#xE71D;" Style="{StaticResource Icon}" FontSize="22"
-                                       HorizontalAlignment="Left" Foreground="{DynamicResource App.Accent}" />
+                                       HorizontalAlignment="Left" Foreground="{DynamicResource App.AccentText}" />
                             <TextBlock Text="Re-registrar Apps" Style="{StaticResource Text.CardTitle}" Margin="0,10,0,2" />
                             <TextBlock Text="Restaura apps nativos" Style="{StaticResource Text.Caption}" />
                         </StackPanel>
@@ -150,7 +137,7 @@
                     <Button Style="{StaticResource Btn.Tile}" Margin="0" Click="GpuMsi_Click">
                         <StackPanel>
                             <TextBlock Text="&#xE7FC;" Style="{StaticResource Icon}" FontSize="22"
-                                       HorizontalAlignment="Left" Foreground="{DynamicResource App.Accent}" />
+                                       HorizontalAlignment="Left" Foreground="{DynamicResource App.AccentText}" />
                             <TextBlock Text="MSI Mode GPU" Style="{StaticResource Text.CardTitle}" Margin="0,10,0,2" />
                             <TextBlock Text="Interrupções por GPU" Style="{StaticResource Text.Caption}" />
                         </StackPanel>
@@ -160,21 +147,37 @@
             </StackPanel>
         </ScrollViewer>
 
-        <!-- ===================== CONTENT DIALOG WIN10 ===================== -->
-        <Grid x:Name="ConfirmOverlay" Background="#88000000" Visibility="Collapsed">
-            <Border Style="{StaticResource Card.Solid}" Width="520" Padding="24,20,24,24"
-                    HorizontalAlignment="Center" VerticalAlignment="Center">
-                <StackPanel>
-                    <TextBlock x:Name="ConfirmTitle" Text="Confirmar"
-                               FontSize="20" FontWeight="Light" Foreground="{DynamicResource App.Text}" />
-                    <TextBlock x:Name="ConfirmText" Style="{StaticResource Text.Body}" Margin="0,12,0,0" />
-                    <UniformGrid Columns="2" Margin="0,22,0,0">
-                        <Button Content="Continuar" Style="{StaticResource Btn.Accent}" Margin="0,0,4,0" Click="ConfirmAction_Click" />
-                        <Button Content="Cancelar" Style="{StaticResource Btn.Standard}" Margin="4,0,0,0" Click="CancelConfirm_Click" />
-                    </UniformGrid>
-                </StackPanel>
+        <!-- ===================== CONTENTDIALOG WIN10 ===================== -->
+        <Grid x:Name="ConfirmOverlay" Background="#99000000" Visibility="Collapsed">
+            <Border Width="500"
+                    Background="{DynamicResource App.CardSolid}"
+                    BorderBrush="{DynamicResource App.CardStrokeHover}"
+                    BorderThickness="1"
+                    CornerRadius="0"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Margin="24,20,24,20">
+                        <TextBlock x:Name="ConfirmTitle" Text="Confirmar"
+                                   FontSize="20" FontWeight="Light" Foreground="{DynamicResource App.Text}" />
+                        <TextBlock x:Name="ConfirmText" Style="{StaticResource Text.Body}" Margin="0,12,0,0" />
+                    </StackPanel>
+                    <Border Grid.Row="1"
+                            Background="{DynamicResource App.DialogFooter}"
+                            BorderBrush="{DynamicResource App.Divider}"
+                            BorderThickness="0,1,0,0"
+                            Padding="24,16">
+                        <UniformGrid Columns="2">
+                            <Button Content="Continuar" Style="{StaticResource Btn.Accent}" Margin="0,0,4,0" Click="ConfirmAction_Click" />
+                            <Button Content="Cancelar" Style="{StaticResource Btn.Standard}" Margin="4,0,0,0" Click="CancelConfirm_Click" />
+                        </UniformGrid>
+                    </Border>
+                </Grid>
             </Border>
         </Grid>
     </Grid>
 </UserControl>
-

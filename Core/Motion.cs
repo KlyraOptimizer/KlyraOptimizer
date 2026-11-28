@@ -9,9 +9,8 @@ namespace KlyraOptimizer.Core;
 
 /// <summary>
 /// Animacoes autenticas do Windows 10 UWP:
-/// EntranceThemeTransition (subida suave com desaceleracao exponencial),
-/// DrillInThemeTransition (escala 0.96 -> 1.0 para detalhes da Loja),
-/// SplitView pane expand/collapse e ContentDialog pop-in.
+/// EntranceNavigationTransitionInfo (subida limpa e continua em bloco unico com KeySpline 0.1,0.9,0.2,1.0,
+/// sem piscadas por BeginTime em filhos), DrillInThemeTransition, SplitView e ContentDialog.
 /// Respeita SystemParameters.ClientAreaAnimation ("Mostrar animacoes no Windows").
 /// </summary>
 public static class Motion
@@ -22,30 +21,57 @@ public static class Motion
     private static readonly IEasingFunction EaseInOut =
         new QuadraticEase { EasingMode = EasingMode.EaseInOut };
 
+    private static readonly KeySpline Win10EntranceSpline = new(0.1, 0.9, 0.2, 1.0);
+
     public static bool Enabled => SystemParameters.ClientAreaAnimation;
 
-    /// <summary>EntranceThemeTransition do UWP Windows 10 (deslocamento vertical + fade rapido).</summary>
-    public static void PageIn(FrameworkElement page)
+    /// <summary>
+    /// EntranceNavigationTransitionInfo da XAML Controls Gallery:
+    /// anima o container da pagina de forma sincrona (antes do primeiro Render pass do WPF)
+    /// como uma camada unica de Y=24 -> 0 com KeySpline(0.1,0.9,0.2,1.0), eliminando
+    /// completamente o flash de 1 quadro e o cascateamento piscante dos elementos filhos.
+    /// </summary>
+    public static void PageIn(FrameworkElement host)
     {
-        if (page == null || !Enabled) return;
+        if (host == null) return;
 
-        FadeIn(page, 22, 240);
+        var translate = EnsureTranslate(host);
 
-        var panel = FindDescendant<ScrollViewer>(page)?.Content as Panel;
-        if (panel == null) return;
-
-        var delay = 24;
-        var staggered = 0;
-
-        foreach (var child in panel.Children)
+        if (!Enabled)
         {
-            if (child is not FrameworkElement element || element.Visibility != Visibility.Visible) continue;
-
-            FadeIn(element, 16, 220, delay);
-            delay += 28;
-
-            if (++staggered >= 6) break;
+            host.BeginAnimation(UIElement.OpacityProperty, null);
+            host.Opacity = 1;
+            if (translate != null)
+            {
+                translate.BeginAnimation(TranslateTransform.YProperty, null);
+                translate.Y = 0;
+            }
+            return;
         }
+
+        var opacityFrames = new DoubleAnimationUsingKeyFrames
+        {
+            Duration = TimeSpan.FromMilliseconds(150),
+            FillBehavior = FillBehavior.Stop
+        };
+        opacityFrames.KeyFrames.Add(new DiscreteDoubleKeyFrame(0.0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+        opacityFrames.KeyFrames.Add(new SplineDoubleKeyFrame(1.0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(150)), Win10EntranceSpline));
+
+        host.Opacity = 1;
+        host.BeginAnimation(UIElement.OpacityProperty, opacityFrames);
+
+        if (translate == null) return;
+
+        var slideFrames = new DoubleAnimationUsingKeyFrames
+        {
+            Duration = TimeSpan.FromMilliseconds(230),
+            FillBehavior = FillBehavior.Stop
+        };
+        slideFrames.KeyFrames.Add(new DiscreteDoubleKeyFrame(24.0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+        slideFrames.KeyFrames.Add(new SplineDoubleKeyFrame(0.0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(230)), Win10EntranceSpline));
+
+        translate.Y = 0;
+        translate.BeginAnimation(TranslateTransform.YProperty, slideFrames);
     }
 
     /// <summary>DrillInThemeTransition do Windows 10 (usado ao abrir pagina de detalhes na Loja).</summary>
@@ -53,7 +79,7 @@ public static class Motion
     {
         if (element == null || !Enabled) return;
 
-        var duration = new Duration(TimeSpan.FromMilliseconds(240));
+        var duration = new Duration(TimeSpan.FromMilliseconds(220));
         element.Opacity = 1;
         element.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, duration)
         {
@@ -65,7 +91,7 @@ public static class Motion
         var scale = new ScaleTransform(1, 1);
         element.RenderTransform = scale;
 
-        var zoom = new DoubleAnimation(0.955, 1.0, duration)
+        var zoom = new DoubleAnimation(0.96, 1.0, duration)
         {
             FillBehavior = FillBehavior.Stop,
             EasingFunction = Win10Decelerate
@@ -79,7 +105,7 @@ public static class Motion
     {
         if (element == null || !Enabled) return;
 
-        var duration = new Duration(TimeSpan.FromMilliseconds(210));
+        var duration = new Duration(TimeSpan.FromMilliseconds(200));
         element.Opacity = 1;
         element.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, duration)
         {
@@ -91,7 +117,7 @@ public static class Motion
         var scale = new ScaleTransform(1, 1);
         element.RenderTransform = scale;
 
-        var zoom = new DoubleAnimation(1.03, 1.0, duration)
+        var zoom = new DoubleAnimation(1.025, 1.0, duration)
         {
             FillBehavior = FillBehavior.Stop,
             EasingFunction = Win10Decelerate
@@ -125,32 +151,44 @@ public static class Motion
     public static void FadeIn(
         FrameworkElement element,
         double offsetY = 12,
-        int milliseconds = 220,
+        int milliseconds = 200,
         int delayMilliseconds = 0)
     {
         if (element == null || !Enabled) return;
 
-        var duration = new Duration(TimeSpan.FromMilliseconds(milliseconds));
-        var beginTime = TimeSpan.FromMilliseconds(delayMilliseconds);
+        var totalMs = delayMilliseconds + milliseconds;
+        var opacityFrames = new DoubleAnimationUsingKeyFrames
+        {
+            Duration = TimeSpan.FromMilliseconds(totalMs),
+            FillBehavior = FillBehavior.Stop
+        };
+        opacityFrames.KeyFrames.Add(new DiscreteDoubleKeyFrame(0.0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+        if (delayMilliseconds > 0)
+        {
+            opacityFrames.KeyFrames.Add(new DiscreteDoubleKeyFrame(0.0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(delayMilliseconds))));
+        }
+        opacityFrames.KeyFrames.Add(new SplineDoubleKeyFrame(1.0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(totalMs)), Win10EntranceSpline));
 
         element.Opacity = 1;
-        element.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, duration)
-        {
-            BeginTime = beginTime,
-            FillBehavior = FillBehavior.Stop,
-            EasingFunction = Win10Decelerate
-        });
+        element.BeginAnimation(UIElement.OpacityProperty, opacityFrames);
 
         var translate = EnsureTranslate(element);
         if (translate == null || offsetY <= 0) return;
 
-        translate.Y = 0;
-        translate.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(offsetY, 0, duration)
+        var slideFrames = new DoubleAnimationUsingKeyFrames
         {
-            BeginTime = beginTime,
-            FillBehavior = FillBehavior.Stop,
-            EasingFunction = Win10Decelerate
-        });
+            Duration = TimeSpan.FromMilliseconds(totalMs),
+            FillBehavior = FillBehavior.Stop
+        };
+        slideFrames.KeyFrames.Add(new DiscreteDoubleKeyFrame(offsetY, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+        if (delayMilliseconds > 0)
+        {
+            slideFrames.KeyFrames.Add(new DiscreteDoubleKeyFrame(offsetY, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(delayMilliseconds))));
+        }
+        slideFrames.KeyFrames.Add(new SplineDoubleKeyFrame(0.0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(totalMs)), Win10EntranceSpline));
+
+        translate.Y = 0;
+        translate.BeginAnimation(TranslateTransform.YProperty, slideFrames);
     }
 
     public static void SetVisible(UIElement? element, bool visible, int milliseconds = 150)
@@ -332,7 +370,19 @@ public static class Motion
 
     private static TranslateTransform? EnsureTranslate(FrameworkElement element)
     {
-        if (element.RenderTransform is TranslateTransform existing) return existing;
+        if (element.RenderTransform is TranslateTransform existing && !existing.IsFrozen)
+            return existing;
+
+        if (element.RenderTransform is TransformGroup group && !group.IsFrozen)
+        {
+            foreach (var child in group.Children)
+            {
+                if (child is TranslateTransform tt && !tt.IsFrozen) return tt;
+            }
+            var added = new TranslateTransform();
+            group.Children.Add(added);
+            return added;
+        }
 
         if (element.RenderTransform == null || element.RenderTransform == Transform.Identity)
         {
@@ -341,28 +391,16 @@ public static class Motion
             return created;
         }
 
-        return null;
+        var newGroup = new TransformGroup();
+        newGroup.Children.Add(element.RenderTransform.CloneCurrentValue());
+        var tr = new TranslateTransform();
+        newGroup.Children.Add(tr);
+        element.RenderTransform = newGroup;
+        return tr;
     }
 
     private static FrameworkElement? FirstChild(FrameworkElement parent)
         => parent is Panel panel && panel.Children.Count > 0
             ? panel.Children[0] as FrameworkElement
             : null;
-
-    private static T? FindDescendant<T>(DependencyObject root, int maxDepth = 6) where T : DependencyObject
-    {
-        if (root == null || maxDepth < 0) return null;
-
-        var count = VisualTreeHelper.GetChildrenCount(root);
-        for (var i = 0; i < count; i++)
-        {
-            var child = VisualTreeHelper.GetChild(root, i);
-            if (child is T match) return match;
-
-            var found = FindDescendant<T>(child, maxDepth - 1);
-            if (found != null) return found;
-        }
-
-        return null;
-    }
 }

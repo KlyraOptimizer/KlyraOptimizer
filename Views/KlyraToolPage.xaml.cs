@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using KlyraOptimizer.Core;
 using KlyraOptimizer.Services;
 
@@ -26,11 +28,8 @@ public sealed class ToggleRow : INotifyPropertyChanged
             if (_optimized == value) return;
             _optimized = value;
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsOptimized)));
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(StateText)));
         }
     }
-
-    public string StateText => IsOptimized ? "Otimizado" : "Padrão do Windows";
 
     public event PropertyChangedEventHandler? PropertyChanged;
 }
@@ -51,24 +50,24 @@ public partial class KlyraToolPage : UserControl, IRefreshablePage
     {
         _rows.AddRange(new[]
         {
-            new ToggleRow { Id = ToggleId.WindowsUpdate, Glyph = "\uE895", Title = "Windows Update",
-                Description = "Reativar o padrão com proteção de drivers ou desativar por completo." },
-            new ToggleRow { Id = ToggleId.MicrosoftStore, Glyph = "\uE719", Title = "Microsoft Store oficial",
-                Description = "Reinstalar a loja oficial ou remover/desativar os serviços em segundo plano." },
-            new ToggleRow { Id = ToggleId.Bluetooth, Glyph = "\uE702", Title = "Serviços de Bluetooth",
-                Description = "Controla bthserv, BTAGService e BthAvctpSvc." },
-            new ToggleRow { Id = ToggleId.GameDvr, Glyph = "\uE7FC", Title = "GameDVR e Xbox Game Bar",
-                Description = "Reativar a gravação em segundo plano ou otimizar para jogos." },
-            new ToggleRow { Id = ToggleId.Copilot, Glyph = "\uE734", Title = "Copilot, Recall e Bing",
-                Description = "Reativar os recursos de IA e pesquisa web ou desativar tudo." },
-            new ToggleRow { Id = ToggleId.Transparency, Glyph = "\uE790", Title = "Transparência e animações",
-                Description = "Efeitos visuais do sistema e animações da barra de tarefas." },
-            new ToggleRow { Id = ToggleId.SysMain, Glyph = "\uE945", Title = "Superfetch (SysMain)",
-                Description = "Cache de aplicativos em memória RAM: reativar ou desativar." },
-            new ToggleRow { Id = ToggleId.VbsHvci, Glyph = "\uE72E", Title = "Isolamento de núcleo (VBS/HVCI)",
-                Description = "Segurança baseada em virtualização: reativar ou ganhar desempenho. Requer reinício." },
-            new ToggleRow { Id = ToggleId.Hibernation, Glyph = "\uE7E8", Title = "Hibernação e Fast Startup",
-                Description = "Reativar a hibernação ou desativar para liberar espaço em disco." }
+            new ToggleRow { Id = ToggleId.WindowsUpdate, Glyph = "\uE895", Title = "Bloquear Windows Update automático",
+                Description = "Ativado: para e desativa serviços de update. Desativado: restaura com proteção de drivers." },
+            new ToggleRow { Id = ToggleId.MicrosoftStore, Glyph = "\uE719", Title = "Desativar serviços da Microsoft Store oficial",
+                Description = "Ativado: bloqueia a loja oficial em segundo plano. Desativado: reativa os serviços." },
+            new ToggleRow { Id = ToggleId.Bluetooth, Glyph = "\uE702", Title = "Desativar serviços de Bluetooth",
+                Description = "Controla bthserv, BTAGService e BthAvctpSvc para economizar memória." },
+            new ToggleRow { Id = ToggleId.GameDvr, Glyph = "\uE7FC", Title = "Otimizar GameDVR e desativar captura em segundo plano",
+                Description = "Reduz consumo de GPU/CPU em jogos desativando a gravação contínua da Game Bar." },
+            new ToggleRow { Id = ToggleId.Copilot, Glyph = "\uE734", Title = "Desativar Copilot, Recall e pesquisas Bing",
+                Description = "Bloqueia recursos de IA e sugestões web no Menu Iniciar e Explorer." },
+            new ToggleRow { Id = ToggleId.Transparency, Glyph = "\uE790", Title = "Reduzir transparência e animações da barra de tarefas",
+                Description = "Alivia a composição DWM em computadores mais modestos." },
+            new ToggleRow { Id = ToggleId.SysMain, Glyph = "\uE945", Title = "Desativar Superfetch (SysMain)",
+                Description = "Evita pré-carregamento constante em disco/RAM em sistemas com SSD NVMe." },
+            new ToggleRow { Id = ToggleId.VbsHvci, Glyph = "\uE72E", Title = "Desativar Isolamento de Núcleo (VBS/HVCI)",
+                Description = "Libera desempenho bruto de CPU em jogos competitivos. Requer reinicialização." },
+            new ToggleRow { Id = ToggleId.Hibernation, Glyph = "\uE7E8", Title = "Desativar Hibernação e Fast Startup",
+                Description = "Remove o arquivo hiberfil.sys liberando vários gigabytes no SSD." }
         });
 
         ToggleList.ItemsSource = _rows;
@@ -77,11 +76,8 @@ public partial class KlyraToolPage : UserControl, IRefreshablePage
     public void OnActivated()
     {
         RefreshState();
-        RefreshRows();
-
-        AppServices.Log.Write(
-            "Klyra Tool aberto: funções ao vivo prontas.",
-            LogKind.Info);
+        _ = RefreshRowsAsync();
+        AppServices.Log.Write("Klyra Tool aberto: chaves ToggleSwitch prontas.", LogKind.Info);
     }
 
     private void RefreshState()
@@ -97,11 +93,25 @@ public partial class KlyraToolPage : UserControl, IRefreshablePage
         SwitchAdvanced.IsEnabled = system.ActiveMode != ActiveMode.Advanced;
     }
 
-    private void RefreshRows()
+    private async Task RefreshRowsAsync()
     {
+        var ids = _rows.Select(r => r.Id).ToArray();
+        var states = await Task.Run(() =>
+        {
+            var dict = new Dictionary<ToggleId, bool>(ids.Length);
+            foreach (var id in ids)
+            {
+                dict[id] = AppServices.Optimizer.IsOptimized(id);
+            }
+            return dict;
+        });
+
         foreach (var row in _rows)
         {
-            row.IsOptimized = AppServices.Optimizer.IsOptimized(row.Id);
+            if (states.TryGetValue(row.Id, out var opt))
+            {
+                row.IsOptimized = opt;
+            }
         }
     }
 
@@ -113,24 +123,26 @@ public partial class KlyraToolPage : UserControl, IRefreshablePage
         if (status != null) ActionStatus.Text = status;
     }
 
-    private void SwitchMode_Click(object sender, RoutedEventArgs e)
+    private async void SwitchMode_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { Tag: string tag } || _busy) return;
         if (!int.TryParse(tag, out var modeValue)) return;
 
         var target = (ActiveMode)modeValue;
         if (target == AppServices.System.ActiveMode) return;
-        if (!Shell.RequireAdmin()) return;
+        if (!await Shell.RequireAdminAsync()) return;
 
         ShowConfirm(
             "Trocar o perfil de otimização",
             $"O sistema vai migrar de \"{AppServices.System.ActiveModeLabel}\" para \"{ModeName(target)}\".\n\n" +
-            "As camadas necessárias serão aplicadas e as que não pertencem ao novo modo serão revertidas.",
+            "A Proteção do Sistema será verificada/ativada, um Ponto de Restauração será criado automaticamente e as camadas serão ajustadas.",
             async () =>
             {
-                SetBusy(true, $"Migrando para {ModeName(target)}...");
+                SetBusy(true, "Verificando Proteção do Sistema e criando Ponto de Restauração...");
                 try
                 {
+                    await AppServices.Restore.EnsureAndCreatePointAsync($"Klyra Optimizer - {target}");
+                    SetBusy(true, $"Migrando para {ModeName(target)}...");
                     await Task.Run(() => AppServices.Optimizer.SwitchMode(target));
                     AppServices.RefreshSystem();
                     SetBusy(false, $"{ModeName(target)} ativo.");
@@ -141,35 +153,58 @@ public partial class KlyraToolPage : UserControl, IRefreshablePage
                 }
 
                 RefreshState();
-                RefreshRows();
+                await RefreshRowsAsync();
             });
     }
 
-    private void ToggleDefault_Click(object sender, RoutedEventArgs e) => ApplyToggle(sender, optimize: false);
-
-    private void ToggleOptimize_Click(object sender, RoutedEventArgs e) => ApplyToggle(sender, optimize: true);
-
-    private async void ApplyToggle(object sender, bool optimize)
+    private async void RowSwitch_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement element || element.Tag is not ToggleId id) return;
-        if (_busy) return;
-        if (!Shell.RequireAdmin()) return;
+        if (sender is not CheckBox { Tag: ToggleRow row } box) return;
 
-        var row = _rows.FirstOrDefault(r => r.Id == id);
-        SetBusy(true, $"Ajustando {row?.Title ?? id.ToString()}...");
+        // O estado alvo e a inversao do estado atual sincronizado no modelo.
+        // IMPORTANTE: nunca atribuir "box.IsChecked = ..." diretamente, pois isso define um valor
+        // local na DependencyProperty e destroi o Binding OneWay do XAML!
+        var desired = !row.IsOptimized;
+
+        if (_busy)
+        {
+            BindingOperations.GetBindingExpression(box, ToggleButton.IsCheckedProperty)?.UpdateTarget();
+            return;
+        }
+
+        if (!await Shell.RequireAdminAsync())
+        {
+            BindingOperations.GetBindingExpression(box, ToggleButton.IsCheckedProperty)?.UpdateTarget();
+            return;
+        }
+
+        row.IsOptimized = desired;
+        BindingOperations.GetBindingExpression(box, ToggleButton.IsCheckedProperty)?.UpdateTarget();
+
+        SetBusy(true, $"Ajustando {row.Title}...");
+        box.IsEnabled = false;
         try
         {
-            await Task.Run(() => AppServices.Optimizer.SetToggle(id, optimize));
+            await Task.Run(() => AppServices.Optimizer.SetToggle(row.Id, desired));
             AppServices.RefreshSystem();
-            SetBusy(false, $"{row?.Title}: {(optimize ? "otimizado" : "padrão restaurado")}.");
+
+            var actual = await Task.Run(() => AppServices.Optimizer.IsOptimized(row.Id));
+            row.IsOptimized = actual;
+            BindingOperations.GetBindingExpression(box, ToggleButton.IsCheckedProperty)?.UpdateTarget();
+
+            SetBusy(false, $"{row.Title}: {(actual ? "Ativado" : "Padrão do Windows")}.");
         }
         catch (Exception ex)
         {
             AppServices.Log.Write($"   [ERRO] {ex.Message}", LogKind.Failed);
+            await RefreshRowsAsync();
+            BindingOperations.GetBindingExpression(box, ToggleButton.IsCheckedProperty)?.UpdateTarget();
             SetBusy(false, "Erro: " + ex.Message);
         }
-
-        RefreshRows();
+        finally
+        {
+            box.IsEnabled = true;
+        }
     }
 
     private async void CleanRam_Click(object sender, RoutedEventArgs e)
@@ -187,9 +222,9 @@ public partial class KlyraToolPage : UserControl, IRefreshablePage
         }
     }
 
-    private void ResetNetwork_Click(object sender, RoutedEventArgs e)
+    private async void ResetNetwork_Click(object sender, RoutedEventArgs e)
     {
-        if (!Shell.RequireAdmin()) return;
+        if (!await Shell.RequireAdminAsync()) return;
 
         ShowConfirm(
             "Reset completo de rede",
@@ -225,9 +260,9 @@ public partial class KlyraToolPage : UserControl, IRefreshablePage
         }
     }
 
-    private void GpuMsi_Click(object sender, RoutedEventArgs e)
+    private async void GpuMsi_Click(object sender, RoutedEventArgs e)
     {
-        if (!Shell.RequireAdmin()) return;
+        if (!await Shell.RequireAdminAsync()) return;
 
         ShowConfirm(
             "MSI Mode das GPUs",
@@ -278,4 +313,3 @@ public partial class KlyraToolPage : UserControl, IRefreshablePage
         _ => "Nenhum"
     };
 }
-

@@ -21,12 +21,31 @@ public static class AppServices
 
     public static GpuMsiService Gpu { get; private set; } = null!;
 
+    public static TrayIconService? Tray { get; set; }
+
     public const string AppName = "Klyra Optimizer";
 
-    public const string Version = "1.5.2";
+    public const string Version = "1.6.0";
 
     /// <summary>Pedido de navegacao vindo de qualquer ponto do app.</summary>
     public static Action<string>? NavigationRequested { get; set; }
+
+    /// <summary>Exibe um ContentDialog modal nativo do Windows 10 na MainWindow.</summary>
+    public static Func<string, string, string, string?, bool, Task<bool>>? DialogRequested { get; set; }
+
+    public static Task<bool> ShowDialogAsync(
+        string title,
+        string content,
+        string primaryButtonText = "OK",
+        string? closeButtonText = null,
+        bool isDanger = false)
+    {
+        if (DialogRequested != null)
+        {
+            return DialogRequested(title, content, primaryButtonText, closeButtonText, isDanger);
+        }
+        return Task.FromResult(false);
+    }
 
     public static event Action? StateChanged;
 

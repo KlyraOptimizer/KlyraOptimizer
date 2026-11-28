@@ -27,6 +27,14 @@ public partial class OptimizerPage : UserControl, IRefreshablePage
         };
     }
 
+    private void MenuDelaySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (MenuDelayLabel != null)
+        {
+            MenuDelayLabel.Text = $"{(int)Math.Round(e.NewValue)} ms";
+        }
+    }
+
     private void OnBackgroundLog(string line, LogKind kind)
     {
         if (!AppServices.Optimizer.Busy) return;
@@ -79,6 +87,13 @@ public partial class OptimizerPage : UserControl, IRefreshablePage
         SkippedChip.Text = skippedText;
         FailedChip.Text = failedText;
 
+        if (AppServices.Optimizer.Busy)
+        {
+            var total = engine.Applied + engine.Skipped + engine.Failed;
+            CompletionBar.Visibility = Visibility.Visible;
+            CompletionBar.Value = Math.Min(96, total * 1.6);
+        }
+
         if (!appliedChanged && !skippedChanged && !failedChanged) return;
 
         var now = DateTime.UtcNow;
@@ -96,17 +111,14 @@ public partial class OptimizerPage : UserControl, IRefreshablePage
         var options = BuildOptions();
         _pending = options;
 
-        var restoreLine = options.CreateRestorePoint
-            ? "Ponto de restauração: será verificado/criado antes de aplicar."
-            : "Ponto de restauração: desativado nesta execução.";
-
         ConfirmSummary.Text =
             $"Modo selecionado: {options.ModeName}\n" +
             $"CompactOS: {CompactLabel(options.Compact)}\n" +
             $"Windows Update: {(options.Update == UpdateChoice.Disable ? "desativar" : "manter ativo com proteção de drivers")}\n" +
             $"Microsoft Store: {StoreLabel(options.Store)}\n" +
             $"Bluetooth: {(options.DisableBluetooth ? "desativar serviços" : "manter ativo")}\n" +
-            restoreLine;
+            $"MenuShowDelay: {options.MenuShowDelayMs} ms\n" +
+            "Ponto de restauração: proteção verificada/ativada e ponto criado automaticamente antes de aplicar.";
 
         Motion.ShowOverlay(ConfirmOverlay);
     }
@@ -123,7 +135,7 @@ public partial class OptimizerPage : UserControl, IRefreshablePage
         var options = _pending;
         if (options == null) return;
 
-        if (!Shell.RequireAdmin()) return;
+        if (!await Shell.RequireAdminAsync()) return;
 
         await RunOptimizationAsync(options);
     }
@@ -131,18 +143,19 @@ public partial class OptimizerPage : UserControl, IRefreshablePage
     private async Task RunOptimizationAsync(OptimizerOptions options)
     {
         SetBusy(true);
+        CompletionBar.Value = 5;
+        CompletionBar.Visibility = Visibility.Visible;
         StatusText.Text = $"Aplicando {options.ModeName} em segundo plano...";
 
         OptimizerSummary summary;
 
         try
         {
-            if (options.CreateRestorePoint)
-            {
-                StatusText.Text = "Verificando Proteção do Sistema e criando Ponto de Restauração...";
-                await Task.Run(() => AppServices.Restore.EnsureProtection());
-                await AppServices.Restore.CreatePointAsync($"Klyra Optimizer - {options.Mode}");
-            }
+            StatusText.Text = "Verificando/ativando Proteção do Sistema e criando Ponto de Restauração...";
+            var rpCreated = await AppServices.Restore.EnsureAndCreatePointAsync($"Klyra Optimizer - {options.Mode}");
+            StatusText.Text = rpCreated
+                ? $"Ponto de Restauração criado. Aplicando {options.ModeName}..."
+                : $"Aplicando {options.ModeName} em segundo plano...";
 
             summary = await Task.Run(() => AppServices.Optimizer.Apply(options, CancellationToken.None));
         }
@@ -154,6 +167,7 @@ public partial class OptimizerPage : UserControl, IRefreshablePage
             return;
         }
 
+        CompletionBar.Value = 100;
         SetBusy(false);
         AppServices.RefreshSystem();
         UpdateCounters();
@@ -185,25 +199,34 @@ public partial class OptimizerPage : UserControl, IRefreshablePage
 
     private OptimizerOptions BuildOptions()
     {
+        var compactTag = (CompactCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? "skip";
+        var storeTag = (StoreCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? "keep";
+
         return new OptimizerOptions
         {
             Mode = ModeAdvanced.IsChecked == true ? ActiveMode.Advanced
                 : ModeMedium.IsChecked == true ? ActiveMode.Medium
                 : ActiveMode.Standard,
 
-            Compact = CompactNever.IsChecked == true ? CompactMode.Never
-                : CompactAlways.IsChecked == true ? CompactMode.Always
-                : CompactMode.Skip,
+            Compact = compactTag switch
+            {
+                "never" => CompactMode.Never,
+                "always" => CompactMode.Always,
+                _ => CompactMode.Skip
+            },
 
-            Update = UpdateDisable.IsChecked == true ? UpdateChoice.Disable : UpdateChoice.KeepActive,
+            Update = UpdateKeepSwitch.IsChecked == true ? UpdateChoice.KeepActive : UpdateChoice.Disable,
 
-            Store = StoreRemove.IsChecked == true ? StoreChoice.RemoveApp
-                : StoreServices.IsChecked == true ? StoreChoice.ServicesOnly
-                : StoreChoice.Keep,
+            Store = storeTag switch
+            {
+                "remove" => StoreChoice.RemoveApp,
+                "services" => StoreChoice.ServicesOnly,
+                _ => StoreChoice.Keep
+            },
 
-            DisableBluetooth = BluetoothDisable.IsChecked == true,
+            DisableBluetooth = BluetoothKeepSwitch.IsChecked != true,
 
-            CreateRestorePoint = RestoreCheck.IsChecked == true
+            MenuShowDelayMs = (int)Math.Round(MenuDelaySlider.Value)
         };
     }
 

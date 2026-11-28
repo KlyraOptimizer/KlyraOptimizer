@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Net.Http;
+using System.Net.NetworkInformation;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -34,6 +35,8 @@ public sealed class StoreApp : INotifyPropertyChanged
     public string? HeroUrl { get; set; }
 
     public string? TileColorHex { get; set; }
+
+    public string? PackageFamilyName { get; set; }
 
     public string Category
     {
@@ -153,6 +156,8 @@ public sealed class StoreDetails
 
     public string? TileColorHex { get; set; }
 
+    public string? PackageFamilyName { get; set; }
+
     public string? Version { get; set; }
 
     public string? SizeLabel { get; set; }
@@ -233,6 +238,44 @@ public sealed class StoreService
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36");
     }
 
+    /// <summary>
+    /// Verifica silenciosamente se ha conexao ativa com a Internet (zero escrita em logs).
+    /// </summary>
+    public async Task<bool> CheckInternetSilentAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            if (!NetworkInterface.GetIsNetworkAvailable()) return false;
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(3.5));
+
+            using var req = new HttpRequestMessage(HttpMethod.Get, "http://www.msftconnecttest.com/connecttest.txt");
+            using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false);
+            if ((int)resp.StatusCode is >= 200 and < 500) return true;
+        }
+        catch
+        {
+            // tenta fallback direto no endpoint HTTPS da Store antes de declarar offline
+        }
+
+        try
+        {
+            if (!NetworkInterface.GetIsNetworkAvailable()) return false;
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(3.5));
+
+            using var req = new HttpRequestMessage(HttpMethod.Head, "https://displaycatalog.mp.microsoft.com/v7.0/products?bigIds=9NCBCSZSJRSB&market=BR&languages=pt-br&fieldsTemplate=browse");
+            using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false);
+            return (int)resp.StatusCode is >= 200 and < 500;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public async Task<BitmapImage?> LoadImageAsync(string? url, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(url)) return null;
@@ -295,6 +338,7 @@ public sealed class StoreService
                     LogoUrl = details.LogoUrl,
                     HeroUrl = details.HeroUrl,
                     TileColorHex = details.TileColorHex,
+                    PackageFamilyName = details.PackageFamilyName,
                     Rating = details.Rating,
                     RatingCount = details.RatingCount,
                     Summary = details.ShortDescription ?? string.Empty
@@ -314,7 +358,10 @@ public sealed class StoreService
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _log.Write($"   [AVISO] Vitrine DisplayCatalog: {ex.Message}", LogKind.Warning);
+            if (NetworkInterface.GetIsNetworkAvailable() && ex is not HttpRequestException)
+            {
+                _log.Write($"   [AVISO] Vitrine DisplayCatalog: {ex.Message}", LogKind.Warning);
+            }
         }
 
         return apps;
@@ -359,6 +406,7 @@ public sealed class StoreService
                 app.LogoUrl = details.LogoUrl;
                 app.HeroUrl = details.HeroUrl;
                 app.TileColorHex = details.TileColorHex;
+                app.PackageFamilyName ??= details.PackageFamilyName;
                 app.Rating = details.Rating;
                 app.RatingCount = details.RatingCount;
                 ApplyTileColor(app, details.TileColorHex);
@@ -525,6 +573,7 @@ public sealed class StoreService
                     LogoUrl = details.LogoUrl,
                     HeroUrl = details.HeroUrl,
                     TileColorHex = details.TileColorHex,
+                    PackageFamilyName = details.PackageFamilyName,
                     Rating = details.Rating,
                     RatingCount = details.RatingCount,
                     Summary = $"Product ID: {id}"
@@ -603,6 +652,7 @@ public sealed class StoreService
                     details.LogoUrl ??= parsed.LogoUrl;
                     details.HeroUrl ??= parsed.HeroUrl;
                     details.TileColorHex ??= parsed.TileColorHex;
+                    details.PackageFamilyName ??= parsed.PackageFamilyName;
                     details.SizeLabel ??= parsed.SizeLabel;
                     details.ReleaseYear ??= parsed.ReleaseYear;
                     details.Version ??= parsed.Version;
@@ -651,6 +701,7 @@ public sealed class StoreService
         if (product.TryGetProperty("Properties", out var props) && props.ValueKind == JsonValueKind.Object)
         {
             details.Category = GetString(props, "Category");
+            details.PackageFamilyName = GetString(props, "PackageFamilyName");
         }
 
         if (product.TryGetProperty("MarketProperties", out var marketProps) &&
@@ -701,6 +752,8 @@ public sealed class StoreService
                 {
                     foreach (var pkg in packages.EnumerateArray())
                     {
+                        details.PackageFamilyName ??= GetString(pkg, "PackageFamilyName");
+
                         if (pkg.TryGetProperty("MaxDownloadSizeInBytes", out var sz) &&
                             sz.TryGetInt64(out var bytes) && bytes > 0)
                         {

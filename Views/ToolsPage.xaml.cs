@@ -135,7 +135,7 @@ public partial class ToolsPage : UserControl, IRefreshablePage
 
     private async void GpuApply_Click(object sender, RoutedEventArgs e)
     {
-        if (!Shell.RequireAdmin()) return;
+        if (!await Shell.RequireAdminAsync()) return;
 
         Motion.SetVisible(BusyRing, true);
         AppServices.Log.Phase("APLICANDO MSI MODE NAS GPUS");
@@ -146,7 +146,7 @@ public partial class ToolsPage : UserControl, IRefreshablePage
 
     private async void GpuRevert_Click(object sender, RoutedEventArgs e)
     {
-        if (!Shell.RequireAdmin()) return;
+        if (!await Shell.RequireAdminAsync()) return;
 
         Motion.SetVisible(BusyRing, true);
         AppServices.Log.Phase("REVERTENDO MSI MODE");

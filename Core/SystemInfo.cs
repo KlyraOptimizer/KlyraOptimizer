@@ -17,6 +17,7 @@ public sealed class SystemInfo
     private const string CurrentVersion = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion";
     private const string RestoreKey = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore";
     private const string KlyraKey = @"SOFTWARE\KlyraOptimizer";
+    private const string LegacyAzureKey = @"SOFTWARE\AzureOptimizer";
 
     public int BuildNumber { get; private set; }
 
@@ -75,7 +76,8 @@ public sealed class SystemInfo
                          ?? TweakEngine.ReadString($@"HKLM\{CurrentVersion}", "ReleaseId")
                          ?? string.Empty;
 
-        var mode = TweakEngine.ReadString($@"HKLM\{KlyraKey}", "ActiveMode");
+        var mode = TweakEngine.ReadString($@"HKLM\{KlyraKey}", "ActiveMode")
+                   ?? TweakEngine.ReadString($@"HKLM\{LegacyAzureKey}", "ActiveMode");
         ActiveMode = int.TryParse(mode, out var modeValue) && modeValue is >= 1 and <= 3
             ? (ActiveMode)modeValue
             : ActiveMode.None;
@@ -151,6 +153,8 @@ public sealed class SystemInfo
         {
             using var key = Registry.LocalMachine.OpenSubKey(KlyraKey, writable: true);
             key?.DeleteValue("ActiveMode", throwOnMissingValue: false);
+            using var legacy = Registry.LocalMachine.OpenSubKey(LegacyAzureKey, writable: true);
+            legacy?.DeleteValue("ActiveMode", throwOnMissingValue: false);
         }
         catch
         {

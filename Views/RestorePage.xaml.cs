@@ -80,7 +80,7 @@ public partial class RestorePage : UserControl, IRefreshablePage
 
     private async void EnableProtection_Click(object sender, RoutedEventArgs e)
     {
-        if (!Shell.RequireAdmin()) return;
+        if (!await Shell.RequireAdminAsync()) return;
 
         SetBusy(true);
         ProtectionText.Text = "Ativando Proteção do Sistema em segundo plano...";
@@ -89,9 +89,9 @@ public partial class RestorePage : UserControl, IRefreshablePage
         await RefreshAsync();
     }
 
-    private void CreatePoint_Click(object sender, RoutedEventArgs e)
+    private async void CreatePoint_Click(object sender, RoutedEventArgs e)
     {
-        if (!Shell.RequireAdmin()) return;
+        if (!await Shell.RequireAdminAsync()) return;
 
         ShowConfirm(
             "Criar ponto de restauração",
@@ -107,9 +107,10 @@ public partial class RestorePage : UserControl, IRefreshablePage
             });
     }
 
-    private void RestorePoint_Click(object sender, RoutedEventArgs e)
+    private async void RestorePoint_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { Tag: RestorePointRow row }) return;
+        if (!await Shell.RequireAdminAsync()) return;
 
         ShowConfirm(
             "Restaurar o sistema",
@@ -123,9 +124,9 @@ public partial class RestorePage : UserControl, IRefreshablePage
             });
     }
 
-    private void RevertAll_Click(object sender, RoutedEventArgs e)
+    private async void RevertAll_Click(object sender, RoutedEventArgs e)
     {
-        if (!Shell.RequireAdmin()) return;
+        if (!await Shell.RequireAdminAsync()) return;
 
         ShowConfirm(
             "Reverter todas as otimizações",

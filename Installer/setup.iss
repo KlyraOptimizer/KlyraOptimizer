@@ -4,7 +4,7 @@
 ; =============================================================================
 
 #define AppName        "Klyra Optimizer"
-#define AppVersion     "1.5.2"
+#define AppVersion     "1.6.0"
 #define AppPublisher   "Klyra Optimizer"
 #define AppExe         "KlyraOptimizer.exe"
 #define AppId          "{{7B4C9E12-8D51-4A7E-9B24-3E9F1C40A815}"
@@ -66,6 +66,8 @@ Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#StringChange(AppN
 
 [UninstallRun]
 Filename: "taskkill.exe"; Parameters: "/F /IM {#AppExe}"; Flags: runhidden skipifdoesntexist; RunOnceId: "killapp"
+Filename: "schtasks.exe"; Parameters: "/Delete /TN ""KlyraOptimizer_Startup"" /F"; Flags: runhidden skipifdoesntexist; RunOnceId: "delstartuptask"
+Filename: "reg.exe"; Parameters: "delete ""HKCU\Software\Microsoft\Windows\CurrentVersion\Run"" /v ""KlyraOptimizer"" /f"; Flags: runhidden skipifdoesntexist; RunOnceId: "delstartuprun"
 
 [Code]
 const

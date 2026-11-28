@@ -7,7 +7,7 @@
 
     <Grid>
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Margin="36,16,36,36" MaxWidth="1100" HorizontalAlignment="Left">
+            <StackPanel Margin="32,20,32,36" MaxWidth="1100" HorizontalAlignment="Left">
 
                 <TextBlock Text="Restauração" Style="{StaticResource Text.PageTitle}" />
                 <TextBlock Style="{StaticResource Text.PageSubtitle}"
@@ -24,7 +24,11 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
 
-                            <Border Width="42" Height="42" Background="{DynamicResource App.ControlFill}"
+                            <Border Width="42" Height="42"
+                                    Background="{DynamicResource App.ControlFill}"
+                                    BorderBrush="{DynamicResource App.CardStroke}"
+                                    BorderThickness="1"
+                                    CornerRadius="0"
                                     VerticalAlignment="Center">
                                 <TextBlock x:Name="ProtectionGlyph" Text="&#xE81C;" Style="{StaticResource Icon}"
                                            FontSize="19" />
@@ -70,7 +74,7 @@
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Border Style="{StaticResource Card}" Padding="14,10" Margin="0,0,0,6"
-                                                Background="{DynamicResource App.ControlFill}" BorderBrush="Transparent">
+                                                Background="{DynamicResource App.ControlFill}" BorderBrush="{DynamicResource App.CardStroke}">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="Auto" />
@@ -129,21 +133,38 @@
             </StackPanel>
         </ScrollViewer>
 
-        <!-- ===================== CONTENT DIALOG WIN10 ===================== -->
-        <Grid x:Name="ConfirmOverlay" Background="#88000000" Visibility="Collapsed">
-            <Border Style="{StaticResource Card.Solid}" Width="520" Padding="24,20,24,24"
-                    HorizontalAlignment="Center" VerticalAlignment="Center">
-                <StackPanel>
-                    <TextBlock x:Name="ConfirmTitle" Text="Confirmar"
-                               FontSize="20" FontWeight="Light" Foreground="{DynamicResource App.Text}" />
-                    <TextBlock x:Name="ConfirmText" Style="{StaticResource Text.Body}" Margin="0,12,0,0" />
-                    <UniformGrid Columns="2" Margin="0,22,0,0">
-                        <Button x:Name="ConfirmGoButton" Content="Continuar" Style="{StaticResource Btn.Accent}" Margin="0,0,4,0"
-                                Click="ConfirmAction_Click" />
-                        <Button Content="Cancelar" Style="{StaticResource Btn.Standard}" Margin="4,0,0,0"
-                                Click="CancelConfirm_Click" />
-                    </UniformGrid>
-                </StackPanel>
+        <!-- ===================== CONTENTDIALOG WIN10 ===================== -->
+        <Grid x:Name="ConfirmOverlay" Background="#99000000" Visibility="Collapsed">
+            <Border Width="500"
+                    Background="{DynamicResource App.CardSolid}"
+                    BorderBrush="{DynamicResource App.CardStrokeHover}"
+                    BorderThickness="1"
+                    CornerRadius="0"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Margin="24,20,24,20">
+                        <TextBlock x:Name="ConfirmTitle" Text="Confirmar"
+                                   FontSize="20" FontWeight="Light" Foreground="{DynamicResource App.Text}" />
+                        <TextBlock x:Name="ConfirmText" Style="{StaticResource Text.Body}" Margin="0,12,0,0" />
+                    </StackPanel>
+                    <Border Grid.Row="1"
+                            Background="{DynamicResource App.DialogFooter}"
+                            BorderBrush="{DynamicResource App.Divider}"
+                            BorderThickness="0,1,0,0"
+                            Padding="24,16">
+                        <UniformGrid Columns="2">
+                            <Button x:Name="ConfirmGoButton" Content="Continuar" Style="{StaticResource Btn.Accent}" Margin="0,0,4,0"
+                                    Click="ConfirmAction_Click" />
+                            <Button Content="Cancelar" Style="{StaticResource Btn.Standard}" Margin="4,0,0,0"
+                                    Click="CancelConfirm_Click" />
+                        </UniformGrid>
+                    </Border>
+                </Grid>
             </Border>
         </Grid>
     </Grid>

@@ -9,7 +9,10 @@ namespace KlyraOptimizer.Core;
 /// <summary>
 /// Integracao Win32 nativa do Windows 10:
 /// 1) Vidro fosco Acrylic (SetWindowCompositionAttribute) + cantos retos;
-/// 2) Hook WM_GETMINMAXINFO que encaixa a janela maximizada exatamente na area
+/// 2) Eliminacao total do lag de arraste do DWM (WM_ENTERSIZEMOVE / WM_EXITSIZEMOVE):
+///    alterna dinamicamente entre EnableAcrylicBlurBehind (4) em repouso e EnableBlurBehind (3)
+///    durante o movimento da janela, mantendo o desfoque de vidro ao vivo a 144Hz sem travar;
+/// 3) Hook WM_GETMINMAXINFO que encaixa a janela maximizada exatamente na area
 ///    de trabalho (rcWork) respeitando a Barra de Tarefas em qualquer monitor/DPI.
 /// </summary>
 public static class Win10Acrylic
@@ -93,9 +96,13 @@ public static class Win10Acrylic
     private const int DwmwaUseImmersiveDarkMode = 20;
 
     private const int WmGetMinMaxInfo = 0x0024;
+    private const int WmEnterSizeMove = 0x0231;
+    private const int WmExitSizeMove = 0x0232;
     private const uint MonitorDefaultToNearest = 0x00000002;
     private const uint AbmGetState = 0x00000004;
     private const int AbsAutohide = 0x00000001;
+
+    public static bool IsMovingOrResizing { get; private set; }
 
     [DllImport("user32.dll")]
     private static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttribData data);
@@ -113,10 +120,10 @@ public static class Win10Acrylic
     private static extern uint SHAppBarMessage(uint dwMessage, ref APPBARDATA pData);
 
     /// <summary>
-    /// Registra o hook Win32 WM_GETMINMAXINFO na janela para que o Maximizar
-    /// nunca cubra a Barra de Tarefas nem transborde para fora do monitor.
+    /// Registra os hooks Win32 de maximizacao (WM_GETMINMAXINFO) e de arraste sem lag
+    /// (WM_ENTERSIZEMOVE / WM_EXITSIZEMOVE).
     /// </summary>
-    public static void AttachMaximizeFix(Window window)
+    public static void AttachWindowHooks(Window window, Action? onMoveStateChanged = null)
     {
         var hwnd = new WindowInteropHelper(window).Handle;
         if (hwnd == IntPtr.Zero) return;
@@ -124,10 +131,28 @@ public static class Win10Acrylic
         var source = HwndSource.FromHwnd(hwnd);
         source?.AddHook((IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
         {
-            if (msg == WmGetMinMaxInfo)
+            switch (msg)
             {
-                WmGetMinMaxInfoHandler(window, hWnd, lParam);
-                handled = true;
+                case WmGetMinMaxInfo:
+                    WmGetMinMaxInfoHandler(window, hWnd, lParam);
+                    handled = true;
+                    break;
+
+                case WmEnterSizeMove:
+                    if (!IsMovingOrResizing)
+                    {
+                        IsMovingOrResizing = true;
+                        onMoveStateChanged?.Invoke();
+                    }
+                    break;
+
+                case WmExitSizeMove:
+                    if (IsMovingOrResizing)
+                    {
+                        IsMovingOrResizing = false;
+                        onMoveStateChanged?.Invoke();
+                    }
+                    break;
             }
             return IntPtr.Zero;
         });
@@ -151,8 +176,6 @@ public static class Win10Acrylic
                 var maxW = rcWork.Right - rcWork.Left;
                 var maxH = rcWork.Bottom - rcWork.Top;
 
-                // Se a barra de tarefas estiver configurada para ocultar automaticamente,
-                // deixa 1px na borda inferior para o cursor conseguir revela-la.
                 if (rcWork.Left == rcMonitor.Left &&
                     rcWork.Top == rcMonitor.Top &&
                     rcWork.Right == rcMonitor.Right &&
@@ -171,7 +194,6 @@ public static class Win10Acrylic
             }
         }
 
-        // Respeita MinWidth e MinHeight da janela convertidos pelo DPI atual
         var dpi = VisualTreeHelper.GetDpi(window);
         if (window.MinWidth > 0 && !double.IsInfinity(window.MinWidth))
         {
@@ -248,7 +270,14 @@ public static class Win10Acrylic
 
         if (useAcrylic)
         {
-            state = AccentState.EnableAcrylicBlurBehind;
+            // Durante o arraste (WM_ENTERSIZEMOVE), o EnableAcrylicBlurBehind (4) sofre um gargalo
+            // conhecido do DWM no Windows 10/11 ao recalcular ruido+gaussiana em 500Hz.
+            // Usamos EnableBlurBehind (3) apenas enquanto o mouse arrasta a janela (mantendo o
+            // vidro desfocado ao vivo sem nenhum lag!) e voltamos para EnableAcrylicBlurBehind (4)
+            // no exato instante em que o usuario solta o mouse (WM_EXITSIZEMOVE).
+            state = IsMovingOrResizing
+                ? AccentState.EnableBlurBehind
+                : AccentState.EnableAcrylicBlurBehind;
             tintAbgr = lightTheme ? 0xCCEBEBEBu : 0xC4171717u;
         }
         else
