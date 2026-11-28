@@ -129,6 +129,13 @@ public static class Win10Acrylic
         if (hwnd == IntPtr.Zero) return;
 
         var source = HwndSource.FromHwnd(hwnd);
+        if (source?.CompositionTarget != null)
+        {
+            // Garante superficie D3D9 com canal Alpha real por pixel (A8R8G8B8),
+            // evitando que o DWM some o tint branco sobre pixels opacos no Modo Claro!
+            source.CompositionTarget.BackgroundColor = Colors.Transparent;
+        }
+
         source?.AddHook((IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled) =>
         {
             switch (msg)
@@ -254,6 +261,12 @@ public static class Win10Acrylic
         var hwnd = new WindowInteropHelper(window).Handle;
         if (hwnd == IntPtr.Zero) return false;
 
+        var source = HwndSource.FromHwnd(hwnd);
+        if (source?.CompositionTarget != null)
+        {
+            source.CompositionTarget.BackgroundColor = Colors.Transparent;
+        }
+
         ForceSquareCorners(window);
 
         try
@@ -278,12 +291,12 @@ public static class Win10Acrylic
             state = IsMovingOrResizing
                 ? AccentState.EnableBlurBehind
                 : AccentState.EnableAcrylicBlurBehind;
-            tintAbgr = lightTheme ? 0xCCEBEBEBu : 0xC4171717u;
+            tintAbgr = lightTheme ? 0xC2E8E8E8u : 0xC4171717u;
         }
         else
         {
-            state = AccentState.EnableGradient;
-            tintAbgr = lightTheme ? 0xFFE6E6E6u : 0xFF1F1F1Fu;
+            state = AccentState.Disabled;
+            tintAbgr = 0u;
         }
 
         var accent = new AccentPolicy

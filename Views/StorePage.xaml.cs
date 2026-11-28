@@ -18,10 +18,15 @@ public partial class StorePage : UserControl, IRefreshablePage
     private StoreApp? _selected;
     private InstalledAppInfo? _selectedInstalledInfo;
     private CancellationTokenSource? _detailCheckCts;
+    private CancellationTokenSource? _navCts;
+    private int _navSeq;
     private StoreApp? _currentHero;
     private List<StoreApp> _lastResults = new();
     private string _lastQuery = string.Empty;
-    private bool _busy;
+    private string _lastResultsHeading = "Resultados";
+    private string _currentPivotTab = "home";
+    private Func<Task>? _pendingOfflineRetry;
+    private bool _installingOrUninstalling;
     private bool _showcaseLoaded;
     private bool _checkingNet;
     private bool _isOnline = true;
@@ -39,14 +44,13 @@ public partial class StorePage : UserControl, IRefreshablePage
         {
             Interval = TimeSpan.FromSeconds(5)
         };
-        _connectivityTimer.Tick += async (_, _) => await CheckConnectivitySilentAsync();
+        _connectivityTimer.Tick += async (_, _) => await PollConnectivitySilentAsync();
 
         Loaded += (_, _) =>
         {
             AppServices.Winget.Progress -= OnWingetProgress;
             AppServices.Winget.Progress += OnWingetProgress;
             _connectivityTimer.Start();
-            _ = CheckConnectivitySilentAsync();
         };
         Unloaded += (_, _) =>
         {
@@ -56,18 +60,21 @@ public partial class StorePage : UserControl, IRefreshablePage
     }
 
     /// <summary>Permite que o botao Voltar da barra de titulo retorne dentro da propria Loja.</summary>
-    public bool CanNavigateBack => DetailView.Visibility == Visibility.Visible || ResultsView.Visibility == Visibility.Visible;
+    public bool CanNavigateBack =>
+        OfflineView.Visibility != Visibility.Visible &&
+        (DetailView.Visibility == Visibility.Visible || ResultsView.Visibility == Visibility.Visible);
 
     public void NavigateBackToHome()
     {
         if (DetailView.Visibility == Visibility.Visible)
         {
-            ShowView(_returnMode, drillOut: true);
+            _ = NavigateBackFromDetailAsync();
             return;
         }
 
         TabHome.IsChecked = true;
-        ShowView("showcase", drillOut: true);
+        _currentPivotTab = "home";
+        _ = OpenTabAsync("home", drillOut: true);
     }
 
     public async void OnActivated()
@@ -77,21 +84,97 @@ public partial class StorePage : UserControl, IRefreshablePage
         await Task.Run(() => AppServices.System.RefreshWinget());
         UpdateWingetState();
 
-        await CheckConnectivitySilentAsync();
+        if (!_showcaseLoaded)
+        {
+            ShowInitialLoading();
+        }
+
+        var (seq, ct) = BeginNavOperation();
+        if (!await EnsureOnlineOrShowOfflineAsync(() => ResumeAfterReconnectAsync(), ct))
+            return;
+
+        if (seq != _navSeq || ct.IsCancellationRequested) return;
+
+        if (!_showcaseLoaded)
+        {
+            await LoadShowcaseCoreAsync(seq, ct);
+        }
+        else
+        {
+            ShowView(_activeViewMode);
+        }
+    }
+
+    private (int Seq, CancellationToken Token) BeginNavOperation()
+    {
+        _navCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _navCts = cts;
+        return (++_navSeq, cts.Token);
+    }
+
+    private void ShowInitialLoading()
+    {
+        StoreLoadingView.Visibility = Visibility.Visible;
+        OfflineView.Visibility = Visibility.Collapsed;
+        ShowcaseView.Visibility = Visibility.Collapsed;
+        ResultsView.Visibility = Visibility.Collapsed;
+        DetailView.Visibility = Visibility.Collapsed;
+    }
+
+    private void ShowOfflineScreen(Func<Task>? retryWhenOnline = null)
+    {
+        _isOnline = false;
+        if (retryWhenOnline != null)
+        {
+            _pendingOfflineRetry = retryWhenOnline;
+        }
+
+        SetTopBusy(false);
+        StoreLoadingView.Visibility = Visibility.Collapsed;
+        ShowcaseView.Visibility = Visibility.Collapsed;
+        ResultsView.Visibility = Visibility.Collapsed;
+        DetailView.Visibility = Visibility.Collapsed;
+        OfflineView.Visibility = Visibility.Visible;
+        _onNavigationStateChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// Verifica silenciosamente se ha internet antes de QUALQUER acao na Loja.
+    /// Caso nao haja, exibe imediatamente a tela "Voce esta sem conexao com a internet".
+    /// </summary>
+    private async Task<bool> EnsureOnlineOrShowOfflineAsync(Func<Task>? retryWhenOnline, CancellationToken ct = default)
+    {
+        var online = await AppServices.Store.CheckInternetSilentAsync(ct);
+        if (ct.IsCancellationRequested) return false;
+
+        _isOnline = online;
+        if (!online)
+        {
+            ShowOfflineScreen(retryWhenOnline);
+            return false;
+        }
+
+        if (OfflineView.Visibility == Visibility.Visible)
+        {
+            OfflineView.Visibility = Visibility.Collapsed;
+        }
+
+        return true;
     }
 
     private async void RetryConnection_Click(object sender, RoutedEventArgs e)
     {
-        await CheckConnectivitySilentAsync();
+        await PollConnectivitySilentAsync(forceRetry: true);
     }
 
     /// <summary>
-    /// Verifica silenciosamente a Internet ao abrir a aba e a cada 5 segundos (sem gravar em logs).
-    /// Quando a conexao retorna, recarrega automaticamente a vitrine ou a ultima pesquisa pendente.
+    /// Monitora a conexao a cada 5 segundos sem registrar nada em logs.
+    /// Se cair, exibe a tela offline; quando voltar, retoma exatamente a acao pendente.
     /// </summary>
-    private async Task CheckConnectivitySilentAsync()
+    private async Task PollConnectivitySilentAsync(bool forceRetry = false)
     {
-        if (_checkingNet) return;
+        if (_checkingNet || _installingOrUninstalling) return;
         _checkingNet = true;
 
         try
@@ -101,29 +184,27 @@ public partial class StorePage : UserControl, IRefreshablePage
 
             if (!online)
             {
-                if (!_showcaseLoaded || (_activeViewMode == "results" && _lastResults.Count == 0))
+                if (OfflineView.Visibility != Visibility.Visible)
                 {
-                    OfflineView.Visibility = Visibility.Visible;
-                    ShowcaseView.Visibility = Visibility.Collapsed;
-                    ResultsView.Visibility = Visibility.Collapsed;
-                    DetailView.Visibility = Visibility.Collapsed;
+                    ShowOfflineScreen(() => ResumeAfterReconnectAsync());
                 }
                 return;
             }
 
-            if (OfflineView.Visibility == Visibility.Visible)
+            if (OfflineView.Visibility == Visibility.Visible || forceRetry)
             {
                 OfflineView.Visibility = Visibility.Collapsed;
-                RestoreCurrentViewVisibility();
-            }
+                var retry = _pendingOfflineRetry;
+                _pendingOfflineRetry = null;
 
-            if (!_showcaseLoaded && !_busy)
-            {
-                await LoadShowcaseAsync();
-            }
-            else if (_activeViewMode == "results" && _lastResults.Count == 0 && !string.IsNullOrWhiteSpace(_lastQuery) && !_busy)
-            {
-                await SearchAndShowAsync(_lastQuery, ResultsHeader.Text);
+                if (retry != null)
+                {
+                    await retry();
+                }
+                else
+                {
+                    await ResumeAfterReconnectAsync();
+                }
             }
         }
         finally
@@ -132,11 +213,35 @@ public partial class StorePage : UserControl, IRefreshablePage
         }
     }
 
-    private void RestoreCurrentViewVisibility()
+    private async Task ResumeAfterReconnectAsync()
     {
-        ShowcaseView.Visibility = _activeViewMode == "showcase" ? Visibility.Visible : Visibility.Collapsed;
-        ResultsView.Visibility = _activeViewMode == "results" ? Visibility.Visible : Visibility.Collapsed;
-        DetailView.Visibility = _activeViewMode == "detail" ? Visibility.Visible : Visibility.Collapsed;
+        if (!_showcaseLoaded)
+        {
+            var (seq, ct) = BeginNavOperation();
+            ShowInitialLoading();
+            await LoadShowcaseCoreAsync(seq, ct);
+            if (_activeViewMode == "showcase") return;
+        }
+
+        if (_activeViewMode == "detail" && _selected != null)
+        {
+            await OpenProductAsync(_selected);
+            return;
+        }
+
+        if (_activeViewMode == "results")
+        {
+            if (!string.IsNullOrWhiteSpace(_lastQuery))
+            {
+                await SearchAndShowAsync(_lastQuery, _lastResultsHeading);
+                return;
+            }
+
+            await OpenTabAsync(_currentPivotTab);
+            return;
+        }
+
+        ShowView("showcase");
     }
 
     private void OnWingetProgress(string message)
@@ -161,16 +266,13 @@ public partial class StorePage : UserControl, IRefreshablePage
     private void ShowView(string mode, bool drillIn = false, bool drillOut = false)
     {
         _activeViewMode = mode;
-        if (!_isOnline && !_showcaseLoaded)
+        if (!_isOnline)
         {
-            OfflineView.Visibility = Visibility.Visible;
-            ShowcaseView.Visibility = Visibility.Collapsed;
-            ResultsView.Visibility = Visibility.Collapsed;
-            DetailView.Visibility = Visibility.Collapsed;
-            _onNavigationStateChanged?.Invoke();
+            ShowOfflineScreen();
             return;
         }
 
+        StoreLoadingView.Visibility = Visibility.Collapsed;
         OfflineView.Visibility = Visibility.Collapsed;
         ShowcaseView.Visibility = mode == "showcase" ? Visibility.Visible : Visibility.Collapsed;
         ResultsView.Visibility = mode == "results" ? Visibility.Visible : Visibility.Collapsed;
@@ -193,15 +295,16 @@ public partial class StorePage : UserControl, IRefreshablePage
     // ------------------------------------------------------------------
     // Vitrine inicial (estilo Windows 10 Store)
     // ------------------------------------------------------------------
-    private async Task LoadShowcaseAsync()
+    private async Task LoadShowcaseCoreAsync(int seq, CancellationToken ct)
     {
-        SetBusy(true);
+        SetTopBusy(true);
         try
         {
-            var essentialTask = AppServices.Store.GetProductsByIdsAsync(StoreService.EssentialIds, CancellationToken.None);
-            var prodTask = AppServices.Store.GetProductsByIdsAsync(StoreService.ProductivityAndDevIds, CancellationToken.None);
+            var essentialTask = AppServices.Store.GetProductsByIdsAsync(StoreService.EssentialIds, ct);
+            var prodTask = AppServices.Store.GetProductsByIdsAsync(StoreService.ProductivityAndDevIds, ct);
 
             await Task.WhenAll(essentialTask, prodTask);
+            if (seq != _navSeq || ct.IsCancellationRequested) return;
 
             var essentials = essentialTask.Result;
             var productivity = prodTask.Result;
@@ -209,15 +312,11 @@ public partial class StorePage : UserControl, IRefreshablePage
             if (essentials.Count == 0 && productivity.Count == 0)
             {
                 _showcaseLoaded = false;
-                OfflineView.Visibility = Visibility.Visible;
-                ShowcaseView.Visibility = Visibility.Collapsed;
+                ShowOfflineScreen(() => OpenTabAsync("home"));
                 return;
             }
 
             _showcaseLoaded = true;
-            OfflineView.Visibility = Visibility.Collapsed;
-            if (_activeViewMode == "showcase") ShowcaseView.Visibility = Visibility.Visible;
-
             EssentialRow.ItemsSource = essentials;
             ProductivityRow.ItemsSource = productivity;
 
@@ -236,15 +335,27 @@ public partial class StorePage : UserControl, IRefreshablePage
                 await SetHeroAsync(_heroApps[0]);
             }
 
+            if (_activeViewMode == "showcase")
+            {
+                ShowView("showcase");
+            }
+
             _ = HydrateLogosAsync(essentials.Concat(productivity).ToList());
+        }
+        catch (OperationCanceledException)
+        {
         }
         catch (Exception ex)
         {
             AppServices.Log.Write($"[LOJA] Falha ao carregar vitrine: {ex.Message}", LogKind.Warning);
+            if (!await AppServices.Store.CheckInternetSilentAsync())
+            {
+                ShowOfflineScreen(() => OpenTabAsync("home"));
+            }
         }
         finally
         {
-            SetBusy(false);
+            if (seq == _navSeq) SetTopBusy(false);
         }
     }
 
@@ -276,6 +387,8 @@ public partial class StorePage : UserControl, IRefreshablePage
     private async void HeroSlot_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { Tag: string s } || !int.TryParse(s, out var idx)) return;
+        if (!await EnsureOnlineOrShowOfflineAsync(() => ResumeAfterReconnectAsync())) return;
+
         if (idx >= 0 && idx < _heroApps.Count)
         {
             await SetHeroAsync(_heroApps[idx]);
@@ -313,17 +426,38 @@ public partial class StorePage : UserControl, IRefreshablePage
     }
 
     // ------------------------------------------------------------------
-    // Abas Pivot e Categorias
+    // Abas Pivot e Categorias (todas verificam internet imediatamente)
     // ------------------------------------------------------------------
-    private async void Pivot_Click(object sender, RoutedEventArgs e)
+    private void Pivot_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { Tag: string tab }) return;
+        _currentPivotTab = tab;
+        _ = OpenTabAsync(tab);
+    }
+
+    private async Task OpenTabAsync(string tab, bool drillOut = false)
+    {
+        _currentPivotTab = tab;
 
         switch (tab)
         {
             case "home":
-                ShowView("showcase");
+            {
+                var (seq, ct) = BeginNavOperation();
+                if (!_showcaseLoaded) ShowInitialLoading();
+                if (!await EnsureOnlineOrShowOfflineAsync(() => OpenTabAsync("home"), ct)) return;
+                if (seq != _navSeq || ct.IsCancellationRequested) return;
+
+                if (!_showcaseLoaded)
+                {
+                    await LoadShowcaseCoreAsync(seq, ct);
+                }
+                else
+                {
+                    ShowView("showcase", drillOut: drillOut);
+                }
                 break;
+            }
 
             case "apps":
                 await ShowCuratedCollectionAsync("Aplicativos em alta", StoreService.EssentialIds);
@@ -349,36 +483,58 @@ public partial class StorePage : UserControl, IRefreshablePage
         if (section == "productivity")
         {
             TabProd.IsChecked = true;
+            _currentPivotTab = "productivity";
             await ShowCuratedCollectionAsync("Essenciais para Windows e produtividade", StoreService.ProductivityAndDevIds);
         }
         else
         {
             TabApps.IsChecked = true;
+            _currentPivotTab = "apps";
             await ShowCuratedCollectionAsync("Principais aplicativos gratuitos", StoreService.EssentialIds);
         }
     }
 
     private async Task ShowCuratedCollectionAsync(string title, IReadOnlyList<string> ids)
     {
+        var (seq, ct) = BeginNavOperation();
         _returnMode = "results";
+        _lastQuery = string.Empty;
+        _lastResultsHeading = title;
+
+        if (!await EnsureOnlineOrShowOfflineAsync(() => ShowCuratedCollectionAsync(title, ids), ct))
+            return;
+
+        if (seq != _navSeq || ct.IsCancellationRequested) return;
+
         ResultsHeader.Text = title;
         ResultsStatus.Text = "Carregando catálogo...";
         EmptyResults.Visibility = Visibility.Collapsed;
+        ResultsGrid.ItemsSource = null;
         ShowView("results");
 
-        SetBusy(true);
+        SetTopBusy(true);
         try
         {
-            var items = await AppServices.Store.GetProductsByIdsAsync(ids, CancellationToken.None);
-            _lastQuery = string.Empty;
+            var items = await AppServices.Store.GetProductsByIdsAsync(ids, ct);
+            if (seq != _navSeq || ct.IsCancellationRequested) return;
+
+            if (items.Count == 0 && !await AppServices.Store.CheckInternetSilentAsync(ct))
+            {
+                ShowOfflineScreen(() => ShowCuratedCollectionAsync(title, ids));
+                return;
+            }
+
             _lastResults = items;
             ApplyResultSorting();
             ResultsStatus.Text = $"{items.Count} aplicativos disponíveis gratuitamente";
             _ = HydrateLogosAsync(items);
         }
+        catch (OperationCanceledException)
+        {
+        }
         finally
         {
-            SetBusy(false);
+            if (seq == _navSeq) SetTopBusy(false);
         }
     }
 
@@ -392,11 +548,12 @@ public partial class StorePage : UserControl, IRefreshablePage
     private void BackToHome_Click(object sender, RoutedEventArgs e)
     {
         TabHome.IsChecked = true;
-        ShowView("showcase", drillOut: true);
+        _currentPivotTab = "home";
+        _ = OpenTabAsync("home", drillOut: true);
     }
 
     // ------------------------------------------------------------------
-    // Pesquisa
+    // Pesquisa (API + winget complementar sem duplicatas)
     // ------------------------------------------------------------------
     public void RunExternalSearch(string query)
     {
@@ -413,13 +570,19 @@ public partial class StorePage : UserControl, IRefreshablePage
     private void ApplyResultSorting()
     {
         var sortTag = (SortCombo?.SelectedItem as ComboBoxItem)?.Tag as string ?? "relevance";
+        var q = _lastQuery.Trim();
+
         IEnumerable<StoreApp> sorted = sortTag switch
         {
             "rating" => _lastResults.OrderByDescending(r => r.Rating).ThenByDescending(r => r.RatingCount),
-            "name" => _lastResults.OrderBy(r => r.Title),
+            "name" => _lastResults.OrderBy(r => r.Title, StringComparer.CurrentCultureIgnoreCase),
             _ => _lastResults
-                .OrderByDescending(r => !string.IsNullOrEmpty(_lastQuery) && r.Title.StartsWith(_lastQuery, StringComparison.OrdinalIgnoreCase))
-                .ThenBy(r => r.Title)
+                .Select((app, idx) => (app, idx))
+                .OrderByDescending(x => !string.IsNullOrEmpty(q) && x.app.Title.Equals(q, StringComparison.OrdinalIgnoreCase))
+                .ThenByDescending(x => !string.IsNullOrEmpty(q) && x.app.Title.StartsWith(q, StringComparison.OrdinalIgnoreCase))
+                .ThenBy(x => x.app.FromWingetOnly ? 1 : 0)
+                .ThenBy(x => x.idx)
+                .Select(x => x.app)
         };
         ResultsGrid.ItemsSource = sorted.ToList();
     }
@@ -437,38 +600,39 @@ public partial class StorePage : UserControl, IRefreshablePage
 
     private async Task SearchAndShowAsync(string query, string heading)
     {
-        if (_busy || string.IsNullOrWhiteSpace(query)) return;
+        if (string.IsNullOrWhiteSpace(query)) return;
 
         query = query.Trim();
+        var (seq, ct) = BeginNavOperation();
+
         _lastQuery = query;
+        _lastResultsHeading = heading;
         _returnMode = "results";
         ResultsHeader.Text = heading;
 
-        if (!await AppServices.Store.CheckInternetSilentAsync())
-        {
-            _isOnline = false;
-            _activeViewMode = "results";
-            _lastResults.Clear();
-            OfflineView.Visibility = Visibility.Visible;
-            ShowcaseView.Visibility = Visibility.Collapsed;
-            ResultsView.Visibility = Visibility.Collapsed;
-            DetailView.Visibility = Visibility.Collapsed;
-            _onNavigationStateChanged?.Invoke();
+        if (!await EnsureOnlineOrShowOfflineAsync(() => SearchAndShowAsync(query, heading), ct))
             return;
-        }
 
-        _isOnline = true;
-        ResultsStatus.Text = "Consultando a Microsoft Store...";
+        if (seq != _navSeq || ct.IsCancellationRequested) return;
+
+        ResultsStatus.Text = "Consultando a Microsoft Store e o winget...";
         EmptyResults.Visibility = Visibility.Collapsed;
         ResultsGrid.ItemsSource = null;
         ShowView("results");
 
-        SetBusy(true);
-        AppServices.Log.Write($"[LOJA] Consultando Store por '{query}'...", LogKind.Info);
+        SetTopBusy(true);
+        AppServices.Log.Write($"[LOJA] Consultando Store + winget por '{query}'...", LogKind.Info);
 
         try
         {
-            var results = await AppServices.Store.SearchAsync(query, CancellationToken.None);
+            var results = await AppServices.Store.SearchAsync(query, ct);
+            if (seq != _navSeq || ct.IsCancellationRequested) return;
+
+            if (results.Count == 0 && !await AppServices.Store.CheckInternetSilentAsync(ct))
+            {
+                ShowOfflineScreen(() => SearchAndShowAsync(query, heading));
+                return;
+            }
 
             _lastQuery = query;
             _lastResults = results;
@@ -478,26 +642,38 @@ public partial class StorePage : UserControl, IRefreshablePage
             EmptyResults.Visibility = ordered.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             ResultsStatus.Text = ordered.Count == 0
                 ? "Nenhum resultado encontrado"
-                : $"{ordered.Count} aplicativo(s) encontrado(s) na Microsoft Store";
+                : $"{ordered.Count} aplicativo(s) encontrado(s)";
 
             Motion.FadeIn(ResultsGrid, 12, 200);
-            AppServices.Log.Write($"[LOJA] {ordered.Count} resultado(s) para '{query}'.", LogKind.Info);
+            AppServices.Log.Write($"[LOJA] {ordered.Count} resultado(s) consolidado(s) para '{query}'.", LogKind.Info);
 
-            // Enriquece icones, notas e cores em segundo plano sem travar a listagem
+            // Enriquece icones, notas e cores em segundo plano (incluindo os itens vindos do winget!)
             _ = Task.Run(async () =>
             {
                 await AppServices.Store.EnrichAppsAsync(ordered, CancellationToken.None);
                 await HydrateLogosAsync(ordered);
             });
         }
+        catch (OperationCanceledException)
+        {
+        }
         catch (Exception ex)
         {
-            ResultsStatus.Text = "Falha ao consultar a Microsoft Store.";
-            AppServices.Log.Write($"[LOJA] Erro na busca: {ex.Message}", LogKind.Failed);
+            if (seq == _navSeq)
+            {
+                if (!await AppServices.Store.CheckInternetSilentAsync())
+                {
+                    ShowOfflineScreen(() => SearchAndShowAsync(query, heading));
+                    return;
+                }
+
+                ResultsStatus.Text = "Falha ao consultar a Microsoft Store.";
+                AppServices.Log.Write($"[LOJA] Erro na busca: {ex.Message}", LogKind.Failed);
+            }
         }
         finally
         {
-            SetBusy(false);
+            if (seq == _navSeq) SetTopBusy(false);
         }
     }
 
@@ -513,17 +689,34 @@ public partial class StorePage : UserControl, IRefreshablePage
 
     private void BackFromDetail_Click(object sender, RoutedEventArgs e)
     {
+        _ = NavigateBackFromDetailAsync();
+    }
+
+    private async Task NavigateBackFromDetailAsync()
+    {
+        var (seq, ct) = BeginNavOperation();
+        if (!await EnsureOnlineOrShowOfflineAsync(() => NavigateBackFromDetailAsync(), ct))
+            return;
+
+        if (seq != _navSeq || ct.IsCancellationRequested) return;
         ShowView(_returnMode, drillOut: true);
     }
 
     private async Task OpenProductAsync(StoreApp app)
     {
-        _detailCheckCts?.Cancel();
-        var checkCts = new CancellationTokenSource();
-        _detailCheckCts = checkCts;
-        var ct = checkCts.Token;
-
+        var (seq, ct) = BeginNavOperation();
         _selected = app;
+
+        if (!await EnsureOnlineOrShowOfflineAsync(() => OpenProductAsync(app), ct))
+            return;
+
+        if (seq != _navSeq || ct.IsCancellationRequested) return;
+
+        _detailCheckCts?.Cancel();
+        var checkCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _detailCheckCts = checkCts;
+        var detailCt = checkCts.Token;
+
         _selectedInstalledInfo = null;
         DetailView.ScrollToHome();
         ShowView("detail", drillIn: true);
@@ -564,18 +757,18 @@ public partial class StorePage : UserControl, IRefreshablePage
         InstallProgressPanel.Visibility = Visibility.Collapsed;
 
         // Dispara verificacao silenciosa imediata em segundo plano
-        _ = VerifyProductInstalledAsync(app, ct);
+        _ = VerifyProductInstalledAsync(app, detailCt);
 
-        SetBusy(true);
+        SetTopBusy(true);
         try
         {
-            var details = await AppServices.Store.GetDetailsAsync(app.ProductId, ct);
-            if (_selected != app || ct.IsCancellationRequested) return;
+            var details = await AppServices.Store.GetDetailsAsync(app.ProductId, detailCt);
+            if (_selected != app || seq != _navSeq || detailCt.IsCancellationRequested) return;
 
             if (string.IsNullOrWhiteSpace(app.PackageFamilyName) && !string.IsNullOrWhiteSpace(details.PackageFamilyName))
             {
                 app.PackageFamilyName = details.PackageFamilyName;
-                _ = VerifyProductInstalledAsync(app, ct);
+                _ = VerifyProductInstalledAsync(app, detailCt);
             }
 
             DetailDescription.Text = details.Description;
@@ -607,7 +800,7 @@ public partial class StorePage : UserControl, IRefreshablePage
 
             if (app.Logo == null && !string.IsNullOrWhiteSpace(details.LogoUrl))
             {
-                var logoBmp = await AppServices.Store.LoadImageAsync(details.LogoUrl);
+                var logoBmp = await AppServices.Store.LoadImageAsync(details.LogoUrl, detailCt);
                 if (_selected == app && logoBmp != null)
                 {
                     app.Logo = logoBmp;
@@ -619,7 +812,7 @@ public partial class StorePage : UserControl, IRefreshablePage
 
             if (!string.IsNullOrWhiteSpace(details.HeroUrl))
             {
-                var heroBmp = await AppServices.Store.LoadImageAsync(details.HeroUrl);
+                var heroBmp = await AppServices.Store.LoadImageAsync(details.HeroUrl, detailCt);
                 if (_selected == app && heroBmp != null)
                 {
                     DetailHeroImage.Source = heroBmp;
@@ -634,8 +827,8 @@ public partial class StorePage : UserControl, IRefreshablePage
 
                 foreach (var url in details.Screenshots.Take(4))
                 {
-                    var shotBmp = await AppServices.Store.LoadImageAsync(url);
-                    if (_selected != app) return;
+                    var shotBmp = await AppServices.Store.LoadImageAsync(url, detailCt);
+                    if (_selected != app || detailCt.IsCancellationRequested) return;
                     if (shotBmp != null) shots.Add(shotBmp);
                 }
 
@@ -648,10 +841,14 @@ public partial class StorePage : UserControl, IRefreshablePage
         catch (Exception ex)
         {
             AppServices.Log.Write($"[LOJA] Detalhes de {app.ProductId} falharam: {ex.Message}", LogKind.Warning);
+            if (!await AppServices.Store.CheckInternetSilentAsync())
+            {
+                ShowOfflineScreen(() => OpenProductAsync(app));
+            }
         }
         finally
         {
-            SetBusy(false);
+            if (seq == _navSeq) SetTopBusy(false);
         }
     }
 
@@ -663,7 +860,7 @@ public partial class StorePage : UserControl, IRefreshablePage
             if (ct.IsCancellationRequested || _selected != app) return;
 
             _selectedInstalledInfo = info.IsInstalled ? info : null;
-            if (!_busy || InstallProgressPanel.Visibility != Visibility.Visible)
+            if (!_installingOrUninstalling || InstallProgressPanel.Visibility != Visibility.Visible)
             {
                 ApplyInstalledUiState(info.IsInstalled);
             }
@@ -698,11 +895,14 @@ public partial class StorePage : UserControl, IRefreshablePage
     }
 
     // ------------------------------------------------------------------
-    // Instalacao, Abertura e Desinstalacao em segundo plano
+    // Instalacao (com fallback de ID/nome do winget), Abertura e Desinstalacao
     // ------------------------------------------------------------------
     private async void Install_Click(object sender, RoutedEventArgs e)
     {
-        if (_selected == null || _busy) return;
+        if (_selected == null || _installingOrUninstalling) return;
+
+        var app = _selected;
+        if (!await EnsureOnlineOrShowOfflineAsync(() => OpenProductAsync(app))) return;
 
         if (!AppServices.System.WingetInstalled)
         {
@@ -711,9 +911,8 @@ public partial class StorePage : UserControl, IRefreshablePage
             return;
         }
 
-        var app = _selected;
-
-        SetBusy(true);
+        _installingOrUninstalling = true;
+        SetTopBusy(true);
         InstallButton.IsEnabled = false;
         InstallButton.Content = "Instalando...";
         InstallProgressPanel.Visibility = Visibility.Visible;
@@ -721,7 +920,7 @@ public partial class StorePage : UserControl, IRefreshablePage
 
         try
         {
-            var success = await AppServices.Winget.InstallFromStoreAsync(app.ProductId, CancellationToken.None);
+            var success = await AppServices.Winget.InstallStoreAppAsync(app, CancellationToken.None);
 
             if (success)
             {
@@ -735,6 +934,12 @@ public partial class StorePage : UserControl, IRefreshablePage
             }
             else if (_selected == app)
             {
+                if (!await AppServices.Store.CheckInternetSilentAsync())
+                {
+                    ShowOfflineScreen(() => OpenProductAsync(app));
+                    return;
+                }
+
                 ApplyInstalledUiState(
                     isInstalled: false,
                     $"Não foi possível concluir a instalação de {app.Title} (detalhes registrados nos logs).");
@@ -751,7 +956,8 @@ public partial class StorePage : UserControl, IRefreshablePage
         }
         finally
         {
-            SetBusy(false);
+            _installingOrUninstalling = false;
+            SetTopBusy(false);
             InstallProgressPanel.Visibility = Visibility.Collapsed;
             InstallButton.IsEnabled = true;
         }
@@ -779,7 +985,7 @@ public partial class StorePage : UserControl, IRefreshablePage
 
     private async void UninstallApp_Click(object sender, RoutedEventArgs e)
     {
-        if (_selected == null || _busy) return;
+        if (_selected == null || _installingOrUninstalling) return;
         var app = _selected;
 
         var confirmed = await AppServices.ShowDialogAsync(
@@ -790,7 +996,8 @@ public partial class StorePage : UserControl, IRefreshablePage
 
         if (!confirmed || _selected != app) return;
 
-        SetBusy(true);
+        _installingOrUninstalling = true;
+        SetTopBusy(true);
         OpenAppButton.IsEnabled = false;
         UninstallAppButton.IsEnabled = false;
         InstallProgressPanel.Visibility = Visibility.Visible;
@@ -829,16 +1036,19 @@ public partial class StorePage : UserControl, IRefreshablePage
         }
         finally
         {
-            SetBusy(false);
+            _installingOrUninstalling = false;
+            SetTopBusy(false);
             InstallProgressPanel.Visibility = Visibility.Collapsed;
         }
     }
 
     private async void InstallWinget_Click(object sender, RoutedEventArgs e)
     {
-        if (_busy) return;
+        if (_installingOrUninstalling) return;
+        if (!await EnsureOnlineOrShowOfflineAsync(() => ResumeAfterReconnectAsync())) return;
 
-        SetBusy(true);
+        _installingOrUninstalling = true;
+        SetTopBusy(true);
         InstallWingetButton.IsEnabled = false;
         WingetWarn.Visibility = Visibility.Visible;
         WingetWarnText.Text = "Baixando o App Installer e as dependências...";
@@ -855,14 +1065,14 @@ public partial class StorePage : UserControl, IRefreshablePage
         }
         finally
         {
-            SetBusy(false);
+            _installingOrUninstalling = false;
+            SetTopBusy(false);
             InstallWingetButton.IsEnabled = true;
         }
     }
 
-    private void SetBusy(bool busy)
+    private void SetTopBusy(bool busy)
     {
-        _busy = busy;
         Motion.SetVisible(TopProgress, busy);
         if (ResultsLoadingPanel != null)
         {

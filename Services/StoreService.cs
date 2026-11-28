@@ -38,6 +38,15 @@ public sealed class StoreApp : INotifyPropertyChanged
 
     public string? PackageFamilyName { get; set; }
 
+    /// <summary>ID correspondente encontrado pelo winget (para fallback ou resultados exclusivos do winget).</summary>
+    public string? WingetId { get; set; }
+
+    /// <summary>Nome exato do pacote retornado pelo winget (para fallback de instalacao por nome).</summary>
+    public string? WingetName { get; set; }
+
+    /// <summary>Indica que o resultado veio complementarmente do winget por nao existir na API antiga.</summary>
+    public bool FromWingetOnly { get; init; }
+
     public string Category
     {
         get => _category;
@@ -158,6 +167,15 @@ public sealed class StoreDetails
 
     public string? PackageFamilyName { get; set; }
 
+    /// <summary>ID correspondente encontrado pelo winget (para fallback ou resultados exclusivos do winget).</summary>
+    public string? WingetId { get; set; }
+
+    /// <summary>Nome exato do pacote retornado pelo winget (para fallback de instalacao por nome).</summary>
+    public string? WingetName { get; set; }
+
+    /// <summary>Indica que o resultado veio complementarmente do winget por nao existir na API antiga.</summary>
+    public bool FromWingetOnly { get; init; }
+
     public string? Version { get; set; }
 
     public string? SizeLabel { get; set; }
@@ -240,6 +258,7 @@ public sealed class StoreService
 
     /// <summary>
     /// Verifica silenciosamente se ha conexao ativa com a Internet (zero escrita em logs).
+    /// Consulta em paralelo para responder rapido (~100ms online) e falhar rapido (~2.5s offline).
     /// </summary>
     public async Task<bool> CheckInternetSilentAsync(CancellationToken ct = default)
     {
@@ -248,26 +267,36 @@ public sealed class StoreService
             if (!NetworkInterface.GetIsNetworkAvailable()) return false;
 
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(3.5));
+            cts.CancelAfter(TimeSpan.FromSeconds(2.6));
 
-            using var req = new HttpRequestMessage(HttpMethod.Get, "http://www.msftconnecttest.com/connecttest.txt");
-            using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false);
-            if ((int)resp.StatusCode is >= 200 and < 500) return true;
+            var t1 = ProbeUrlAsync("http://www.msftconnecttest.com/connecttest.txt", HttpMethod.Get, cts.Token);
+            var t2 = ProbeUrlAsync(
+                "https://displaycatalog.mp.microsoft.com/v7.0/products?bigIds=9NCBCSZSJRSB&market=BR&languages=pt-br&fieldsTemplate=browse",
+                HttpMethod.Head,
+                cts.Token);
+
+            var first = await Task.WhenAny(t1, t2).ConfigureAwait(false);
+            if (await first.ConfigureAwait(false))
+            {
+                cts.Cancel();
+                return true;
+            }
+
+            var second = ReferenceEquals(first, t1) ? t2 : t1;
+            return await second.ConfigureAwait(false);
         }
         catch
         {
-            // tenta fallback direto no endpoint HTTPS da Store antes de declarar offline
+            return false;
         }
+    }
 
+    private async Task<bool> ProbeUrlAsync(string url, HttpMethod method, CancellationToken ct)
+    {
         try
         {
-            if (!NetworkInterface.GetIsNetworkAvailable()) return false;
-
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(3.5));
-
-            using var req = new HttpRequestMessage(HttpMethod.Head, "https://displaycatalog.mp.microsoft.com/v7.0/products?bigIds=9NCBCSZSJRSB&market=BR&languages=pt-br&fieldsTemplate=browse");
-            using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false);
+            using var req = new HttpRequestMessage(method, url);
+            using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
             return (int)resp.StatusCode is >= 200 and < 500;
         }
         catch
@@ -435,19 +464,143 @@ public sealed class StoreService
         catch { }
     }
 
-    /// <summary>Busca em cascata: manifestSearch -> winget (msstore) -> DisplayCatalog.</summary>
+    /// <summary>
+    /// Pesquisa combinada sem duplicatas:
+    /// 1) Pesquisa primeiro na API da Store (DisplayCatalog + ManifestSearch);
+    /// 2) Pesquisa tambem no winget ("winget search <nome> --source msstore");
+    /// 3) Apps do winget que ja foram encontrados pela API nao sao duplicados na lista final
+    ///    (apenas anexamos seu ID/nome de fallback), exibindo do winget somente o que a API nao encontrou.
+    /// </summary>
     public async Task<List<StoreApp>> SearchAsync(string query, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(query)) return new List<StoreApp>();
         query = query.Trim();
 
-        var results = await SearchManifestAsync(query, ct).ConfigureAwait(false);
-        if (results.Count > 0) return results;
+        // 1) Consulta a API da Store e o winget (msstore) em paralelo, mas consolida a API primeiro
+        var catalogTask = SearchDisplayCatalogAsync(query, ct);
+        var manifestTask = SearchManifestAsync(query, ct);
+        var wingetTask = SearchWingetAsync(query, ct);
 
-        results = await SearchWingetAsync(query, ct).ConfigureAwait(false);
-        if (results.Count > 0) return results;
+        await Task.WhenAll(catalogTask, manifestTask, wingetTask).ConfigureAwait(false);
 
-        return await SearchDisplayCatalogAsync(query, ct).ConfigureAwait(false);
+        var catalogApps = catalogTask.Result;
+        var manifestApps = manifestTask.Result;
+        var wingetApps = wingetTask.Result;
+
+        var finalResults = new List<StoreApp>();
+        var seenIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var byNormTitle = new Dictionary<string, StoreApp>(StringComparer.OrdinalIgnoreCase);
+
+        // Consolida os resultados encontrados pela API (priorizando DisplayCatalog pelos metadados ricos,
+        // ou ManifestSearch primeiro para correspondencias diretas de titulo)
+        foreach (var app in manifestApps.Concat(catalogApps))
+        {
+            if (string.IsNullOrWhiteSpace(app.ProductId)) continue;
+
+            if (seenIds.TryGetValue(app.ProductId, out _))
+            {
+                // Se o item ja veio do ManifestSearch sem logo/avaliacao e o DisplayCatalog trouxe os dados ricos, mescla!
+                var existing = finalResults.FirstOrDefault(r => r.ProductId.Equals(app.ProductId, StringComparison.OrdinalIgnoreCase));
+                if (existing != null)
+                {
+                    MergeRichMetadata(existing, app);
+                }
+                continue;
+            }
+
+            seenIds.Add(app.ProductId);
+            finalResults.Add(app);
+
+            var norm = NormalizeAppKey(app.Title);
+            if (norm.Length > 0 && !byNormTitle.ContainsKey(norm))
+            {
+                byNormTitle[norm] = app;
+            }
+        }
+
+        var apiCount = finalResults.Count;
+        var addedFromWinget = 0;
+
+        // 2) Filtra os resultados do winget: ignora tudo que a API ja encontrou (por ID ou nome normalizado)
+        //    e adiciona apenas os aplicativos que a API nao retornou!
+        foreach (var wgApp in wingetApps)
+        {
+            if (string.IsNullOrWhiteSpace(wgApp.ProductId)) continue;
+
+            if (seenIds.Contains(wgApp.ProductId))
+            {
+                var existingById = finalResults.FirstOrDefault(r =>
+                    r.ProductId.Equals(wgApp.ProductId, StringComparison.OrdinalIgnoreCase));
+                if (existingById != null)
+                {
+                    existingById.WingetId ??= wgApp.WingetId ?? wgApp.ProductId;
+                    existingById.WingetName ??= wgApp.WingetName ?? wgApp.Title;
+                }
+                continue;
+            }
+
+            var norm = NormalizeAppKey(wgApp.Title);
+            if (norm.Length > 0 && byNormTitle.TryGetValue(norm, out var existingByName))
+            {
+                // A API encontrou o mesmo app com outro ID: guarda o ID/nome do winget como fallback de instalacao
+                // e nao duplica na vitrine de pesquisa!
+                existingByName.WingetId ??= wgApp.WingetId ?? wgApp.ProductId;
+                existingByName.WingetName ??= wgApp.WingetName ?? wgApp.Title;
+                continue;
+            }
+
+            seenIds.Add(wgApp.ProductId);
+            if (norm.Length > 0) byNormTitle[norm] = wgApp;
+            finalResults.Add(wgApp);
+            addedFromWinget++;
+        }
+
+        _log.Write(
+            $"   [LOJA] API encontrou {apiCount} app(s); winget (msstore) adicionou {addedFromWinget} app(s) complementar(es).",
+            LogKind.Info);
+
+        return finalResults;
+    }
+
+    private static void MergeRichMetadata(StoreApp target, StoreApp donor)
+    {
+        if (string.IsNullOrWhiteSpace(target.LogoUrl) && !string.IsNullOrWhiteSpace(donor.LogoUrl))
+            target.LogoUrl = donor.LogoUrl;
+        if (string.IsNullOrWhiteSpace(target.HeroUrl) && !string.IsNullOrWhiteSpace(donor.HeroUrl))
+            target.HeroUrl = donor.HeroUrl;
+        if (string.IsNullOrWhiteSpace(target.TileColorHex) && !string.IsNullOrWhiteSpace(donor.TileColorHex))
+        {
+            target.TileColorHex = donor.TileColorHex;
+            ApplyTileColor(target, donor.TileColorHex);
+        }
+        if (string.IsNullOrWhiteSpace(target.PackageFamilyName) && !string.IsNullOrWhiteSpace(donor.PackageFamilyName))
+            target.PackageFamilyName = donor.PackageFamilyName;
+        if (target.Rating <= 0 && donor.Rating > 0)
+        {
+            target.Rating = donor.Rating;
+            target.RatingCount = donor.RatingCount;
+        }
+        if ((string.IsNullOrWhiteSpace(target.Publisher) || target.Publisher == "Microsoft Store") &&
+            !string.IsNullOrWhiteSpace(donor.Publisher))
+        {
+            target.Publisher = donor.Publisher;
+        }
+        if ((string.IsNullOrWhiteSpace(target.Category) || target.Category == "Aplicativo") &&
+            !string.IsNullOrWhiteSpace(donor.Category))
+        {
+            target.Category = donor.Category;
+        }
+    }
+
+    internal static string NormalizeAppKey(string? title)
+    {
+        if (string.IsNullOrWhiteSpace(title)) return string.Empty;
+        var sb = new StringBuilder(title.Length);
+        foreach (var ch in title.Trim().ToLowerInvariant())
+        {
+            if (char.IsLetterOrDigit(ch)) sb.Append(ch);
+        }
+        return sb.ToString();
     }
 
     private async Task<List<StoreApp>> SearchManifestAsync(string query, CancellationToken ct)
@@ -503,41 +656,121 @@ public sealed class StoreService
         var winget = SystemInfo.FindWinget();
         if (winget == null) return results;
 
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var rawLines = new List<string>();
+        var safeQuery = query.Replace("\"", string.Empty).Trim();
+        if (safeQuery.Length == 0) return results;
 
         await Shell.RunAsync(
             winget,
-            $"search --source msstore \"{query}\" --accept-source-agreements --disable-interactivity",
-            line =>
-            {
-                var text = line.TrimEnd('\r', ' ');
-                if (text.Length == 0) return;
-
-                var match = SearchTableRow.Match(text);
-                if (!match.Success) return;
-
-                var id = match.Groups["id"].Value.Trim();
-                var name = match.Groups["name"].Value.Trim();
-
-                if (id.Length < 9 || !seen.Add(id)) return;
-
-                results.Add(new StoreApp
-                {
-                    ProductId = id,
-                    Title = name,
-                    Publisher = "Microsoft Store",
-                    Category = "Aplicativo",
-                    Summary = $"Product ID: {id}"
-                });
-            },
+            $"search \"{safeQuery}\" --source msstore --accept-source-agreements --disable-interactivity",
+            line => rawLines.Add(line),
             ct).ConfigureAwait(false);
 
-        if (results.Count > 0)
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (name, id, _) in ParseWingetSearchLines(rawLines))
         {
-            _log.Write($"   [LOJA] winget (msstore) retornou {results.Count} aplicativo(s).", LogKind.Info);
+            if (id.Length < 9 || !seen.Add(id)) continue;
+
+            results.Add(new StoreApp
+            {
+                ProductId = id,
+                Title = name,
+                Publisher = "Microsoft Store",
+                Category = "Aplicativo",
+                Summary = $"Product ID: {id}",
+                WingetId = id,
+                WingetName = name,
+                FromWingetOnly = true
+            });
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Faz o parse das colunas de saida do `winget search` usando os offsets reais do cabecalho
+    /// (suportando nomes truncados com apenas 1 espaco antes da coluna ID) + fallback por Regex.
+    /// </summary>
+    internal static List<(string Name, string Id, string Version)> ParseWingetSearchLines(IReadOnlyList<string> lines)
+    {
+        var parsed = new List<(string Name, string Id, string Version)>();
+        var sepIndex = -1;
+
+        for (var i = 0; i < lines.Count; i++)
+        {
+            var trimmed = lines[i].Trim();
+            if (trimmed.Length >= 15 && trimmed.All(c => c == '-'))
+            {
+                sepIndex = i;
+                break;
+            }
+        }
+
+        var idCol = -1;
+        var verCol = -1;
+
+        if (sepIndex > 0)
+        {
+            var header = lines[sepIndex - 1].TrimEnd('\r');
+            // Encontra o inicio das colunas no cabecalho ("Nome ... ID ... Versão / Version")
+            var idMatch = Regex.Match(header, @"\s+(ID|Id)\s+");
+            if (idMatch.Success)
+            {
+                idCol = idMatch.Groups[1].Index;
+                var afterId = idCol + idMatch.Groups[1].Length;
+                var rest = header[afterId..];
+                var nextWord = Regex.Match(rest, @"\S+");
+                if (nextWord.Success)
+                {
+                    verCol = afterId + nextWord.Index;
+                }
+            }
+        }
+
+        var startRow = sepIndex >= 0 ? sepIndex + 1 : 0;
+        for (var i = startRow; i < lines.Count; i++)
+        {
+            var line = lines[i].TrimEnd('\r');
+            if (string.IsNullOrWhiteSpace(line)) continue;
+
+            if (idCol > 0 && line.Length > idCol)
+            {
+                var namePart = line[..idCol].Trim();
+                string idPart;
+                string verPart = string.Empty;
+
+                if (verCol > idCol && line.Length > verCol)
+                {
+                    idPart = line[idCol..verCol].Trim();
+                    verPart = line[verCol..].Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? string.Empty;
+                }
+                else
+                {
+                    var tokens = line[idCol..].Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    idPart = tokens.Length > 0 ? tokens[0] : string.Empty;
+                    verPart = tokens.Length > 1 ? tokens[1] : string.Empty;
+                }
+
+                if (!string.IsNullOrWhiteSpace(namePart) &&
+                    !string.IsNullOrWhiteSpace(idPart) &&
+                    !idPart.Contains(' '))
+                {
+                    parsed.Add((namePart, idPart, verPart));
+                    continue;
+                }
+            }
+
+            var match = SearchTableRow.Match(line.TrimEnd());
+            if (match.Success)
+            {
+                parsed.Add((
+                    match.Groups["name"].Value.Trim(),
+                    match.Groups["id"].Value.Trim(),
+                    match.Groups["version"].Value.Trim()));
+            }
+        }
+
+        return parsed;
     }
 
     private async Task<List<StoreApp>> SearchDisplayCatalogAsync(string query, CancellationToken ct)

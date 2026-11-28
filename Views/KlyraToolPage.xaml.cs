@@ -37,6 +37,8 @@ public sealed class ToggleRow : INotifyPropertyChanged
 public partial class KlyraToolPage : UserControl, IRefreshablePage
 {
     private readonly List<ToggleRow> _rows = new();
+    private List<SelectableRemovableApp> _removableApps = new();
+    private CancellationTokenSource? _loadAppsCts;
     private Action? _confirmAction;
     private bool _busy;
 
@@ -281,6 +283,105 @@ public partial class KlyraToolPage : UserControl, IRefreshablePage
                     if (_busy) SetBusy(false);
                 }
             });
+    }
+
+    private async void OpenRemoveApps_Click(object sender, RoutedEventArgs e)
+    {
+        if (_busy || AppServices.Optimizer.Busy) return;
+
+        _loadAppsCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _loadAppsCts = cts;
+
+        AppRemovalLoadingPanel.Visibility = Visibility.Visible;
+        AppRemovalListContainer.Visibility = Visibility.Collapsed;
+        NoRemovableAppsText.Visibility = Visibility.Collapsed;
+        ConfirmRemoveAppsButton.IsEnabled = false;
+        RemovableAppsList.ItemsSource = null;
+        _removableApps.Clear();
+
+        Motion.ShowOverlay(AppRemovalOverlay);
+
+        try
+        {
+            var apps = await AppServices.Optimizer.GetRemovableAppsAsync(cts.Token);
+            if (cts.IsCancellationRequested) return;
+
+            _removableApps = apps
+                .Select(a => new SelectableRemovableApp
+                {
+                    PackageName = a.PackageName,
+                    DisplayName = a.DisplayName,
+                    IsDefault = a.IsDefaultSelected,
+                    IsSelected = a.IsDefaultSelected
+                })
+                .ToList();
+
+            RemovableAppsList.ItemsSource = _removableApps;
+            NoRemovableAppsText.Visibility = _removableApps.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            UpdateSelectedAppsCounter();
+
+            AppRemovalLoadingPanel.Visibility = Visibility.Collapsed;
+            AppRemovalListContainer.Visibility = Visibility.Visible;
+            Motion.FadeIn(AppRemovalListContainer, 8, 160);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch
+        {
+            AppRemovalLoadingPanel.Visibility = Visibility.Collapsed;
+            AppRemovalListContainer.Visibility = Visibility.Visible;
+            NoRemovableAppsText.Visibility = Visibility.Visible;
+            ConfirmRemoveAppsButton.IsEnabled = false;
+        }
+    }
+
+    private void RemovableAppCheck_Click(object sender, RoutedEventArgs e)
+    {
+        UpdateSelectedAppsCounter();
+    }
+
+    private void UpdateSelectedAppsCounter()
+    {
+        var selectedCount = _removableApps.Count(a => a.IsSelected);
+        SelectedAppsCountText.Text = selectedCount == 0
+            ? "Nenhum aplicativo marcado para remoção"
+            : $"{selectedCount} de {_removableApps.Count} aplicativo(s) marcado(s) para remoção";
+        ConfirmRemoveAppsButton.IsEnabled = selectedCount > 0;
+    }
+
+    private void CancelAppRemoval_Click(object sender, RoutedEventArgs e)
+    {
+        _loadAppsCts?.Cancel();
+        Motion.HideOverlay(AppRemovalOverlay);
+    }
+
+    private async void ConfirmRemoveApps_Click(object sender, RoutedEventArgs e)
+    {
+        var selectedPackages = _removableApps
+            .Where(a => a.IsSelected)
+            .Select(a => a.PackageName)
+            .ToList();
+
+        if (selectedPackages.Count == 0) return;
+
+        Motion.HideOverlay(AppRemovalOverlay);
+
+        if (!await Shell.RequireAdminAsync()) return;
+
+        SetBusy(true, $"Removendo {selectedPackages.Count} aplicativo(s) selecionado(s)...");
+        try
+        {
+            await Task.Run(() => AppServices.Optimizer.RemoveAppsStandalone(selectedPackages, CancellationToken.None));
+            AppServices.Winget.InvalidateInstalledCache();
+            SetBusy(false, $"Remoção concluída: {selectedPackages.Count} aplicativo(s) removido(s).");
+        }
+        catch (Exception ex)
+        {
+            AppServices.Log.Write($"   [ERRO] Falha ao remover aplicativos: {ex.Message}", LogKind.Failed);
+            SetBusy(false, "Erro ao remover aplicativos: " + ex.Message);
+        }
     }
 
     private void ShowConfirm(string title, string text, Action action)

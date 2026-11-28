@@ -190,6 +190,7 @@
              MODO 1: VITRINE DA PAGINA INICIAL (HERO + FILEIRAS DA LOJA WIN10)
              ======================================================================= -->
         <ScrollViewer x:Name="ShowcaseView" Grid.Row="3"
+                      Visibility="Collapsed"
                       VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Margin="32,20,32,36">
 
@@ -626,7 +627,24 @@
         </ScrollViewer>
 
         <!-- =======================================================================
-             ESTADO SEM INTERNET (VERIFICACAO AUTOMATICA A CADA 5 SEGUNDOS)
+             CARREGAMENTO INICIAL SINCRONIZADO DA LOJA
+             ======================================================================= -->
+        <Border x:Name="StoreLoadingView"
+                Grid.Row="3"
+                Background="{DynamicResource App.PageBackground}"
+                Visibility="Visible">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="32">
+                <views:Win10ProgressRing Width="40" Height="40" HorizontalAlignment="Center" />
+                <TextBlock Text="Carregando a Microsoft Store..."
+                           Style="{StaticResource Text.Body}"
+                           Foreground="{DynamicResource App.TextSecondary}"
+                           HorizontalAlignment="Center"
+                           Margin="0,14,0,0" />
+            </StackPanel>
+        </Border>
+
+        <!-- =======================================================================
+             ESTADO SEM INTERNET (EXIBIDO EM QUALQUER ACAO QUANDO OFFLINE)
              ======================================================================= -->
         <Border x:Name="OfflineView"
                 Grid.Row="3"
@@ -638,12 +656,12 @@
                            FontSize="44"
                            Foreground="{DynamicResource App.TextTertiary}"
                            HorizontalAlignment="Center" />
-                <TextBlock Text="Você está sem conexão com a Internet"
+                <TextBlock Text="Você está sem conexão com a internet"
                            Style="{StaticResource Text.Subheader}"
                            TextAlignment="Center"
                            HorizontalAlignment="Center"
                            Margin="0,16,0,6" />
-                <TextBlock Text="A Microsoft Store precisa de Internet para carregar o catálogo. Assim que a conexão voltar, a loja será carregada automaticamente."
+                <TextBlock Text="A Microsoft Store precisa de internet para navegar, pesquisar e abrir aplicativos. Assim que a conexão voltar, a loja será carregada automaticamente."
                            Style="{StaticResource Text.Body}"
                            TextAlignment="Center"
                            HorizontalAlignment="Center" />

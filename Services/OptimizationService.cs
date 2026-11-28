@@ -402,6 +402,28 @@ Write-Output ('   Total de aplicativos removidos: ' + $n)";
     }
 
     /// <summary>
+    /// Remove avulsamente apenas os aplicativos AppX selecionados na aba Klyra Tool,
+    /// sem aplicar nem alterar nenhum perfil de otimizacao do sistema.
+    /// </summary>
+    public void RemoveAppsStandalone(IReadOnlyList<string> packageNames, CancellationToken ct = default)
+    {
+        if (packageNames.Count == 0) return;
+
+        Busy = true;
+        _engine.Reset();
+        try
+        {
+            _log.Phase("REMOÇÃO AVULSA DE APLICATIVOS (KLYRA TOOL)");
+            RemoveSelectedAppxPackages(packageNames, ct);
+            _log.Write($"   [OK] Remoção de aplicativos concluída ({packageNames.Count} selecionado(s)).", LogKind.Applied);
+        }
+        finally
+        {
+            Busy = false;
+        }
+    }
+
+    /// <summary>
     /// Carrega os aplicativos AppX removiveis instalados no computador, marcando automaticamente
     /// os pacotes de bloatware padrao do Klyra Optimizer.
     /// </summary>

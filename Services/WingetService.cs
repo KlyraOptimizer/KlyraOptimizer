@@ -293,6 +293,137 @@ public sealed class WingetService
     public async Task<bool> InstallFromStoreAsync(string productId, CancellationToken ct)
         => await InstallAsync(productId, "msstore", ct).ConfigureAwait(false);
 
+    /// <summary>
+    /// Instala um aplicativo da Loja com fallback inteligente via winget:
+    /// 1) Tenta primeiro pelo ProductId encontrado pela API (--source msstore);
+    /// 2) Caso o ID da API falhe, utiliza o ID ou o nome que o winget puxou para instalar
+    ///    (tanto na fonte msstore quanto no repositorio winget caso nao exista pacote msstore instalavel).
+    /// </summary>
+    public async Task<bool> InstallStoreAppAsync(StoreApp app, CancellationToken ct)
+    {
+        // 1) Tentativa direta pelo ProductId principal na msstore
+        if (!string.IsNullOrWhiteSpace(app.ProductId))
+        {
+            if (await InstallAsync(app.ProductId, "msstore", ct).ConfigureAwait(false))
+                return true;
+        }
+
+        ct.ThrowIfCancellationRequested();
+
+        // 2) Se o winget ja retornou um ID ou nome diferente durante a pesquisa, tenta usa-los imediatamente
+        if (!string.IsNullOrWhiteSpace(app.WingetId) &&
+            !app.WingetId.Equals(app.ProductId, StringComparison.OrdinalIgnoreCase))
+        {
+            RaiseProgress($"ID da API falhou; instalando pelo ID do winget ({app.WingetId})...");
+            if (await InstallAsync(app.WingetId, "msstore", ct).ConfigureAwait(false))
+                return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(app.WingetName))
+        {
+            RaiseProgress($"Tentando instalar pelo nome no winget (\"{app.WingetName}\")...");
+            if (await InstallByNameAsync(app.WingetName, "msstore", ct).ConfigureAwait(false))
+                return true;
+        }
+
+        // 3) Consulta o winget ao vivo pelo titulo do app (msstore primeiro, depois winget geral)
+        var winget = SystemInfo.FindWinget();
+        if (winget == null || string.IsNullOrWhiteSpace(app.Title)) return false;
+
+        var cleanTitle = CleanStoreTitle(app.Title);
+        var searchTerm = string.IsNullOrWhiteSpace(cleanTitle) ? app.Title.Trim() : cleanTitle;
+
+        foreach (var source in new[] { "msstore", "winget" })
+        {
+            ct.ThrowIfCancellationRequested();
+            RaiseProgress($"Buscando alternativa de instalação no winget ({source})...");
+
+            var match = await FindBestWingetMatchAsync(winget, searchTerm, app.Title, source, ct).ConfigureAwait(false);
+            if (match == null) continue;
+
+            var (foundName, foundId) = match.Value;
+
+            if (!string.IsNullOrWhiteSpace(foundId) &&
+                !foundId.Equals(app.ProductId, StringComparison.OrdinalIgnoreCase))
+            {
+                RaiseProgress($"Instalando via winget ({foundId})...");
+                if (await InstallAsync(foundId, source, ct).ConfigureAwait(false))
+                    return true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(foundName))
+            {
+                RaiseProgress($"Instalando pelo nome via winget (\"{foundName}\")...");
+                if (await InstallByNameAsync(foundName, source, ct).ConfigureAwait(false))
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    private async Task<(string Name, string Id)?> FindBestWingetMatchAsync(
+        string wingetExe,
+        string searchTerm,
+        string fullTitle,
+        string source,
+        CancellationToken ct)
+    {
+        var safeQuery = searchTerm.Replace("\"", string.Empty).Trim();
+        if (safeQuery.Length == 0) return null;
+
+        var lines = new List<string>();
+        await Shell.RunAsync(
+            wingetExe,
+            $"search \"{safeQuery}\" --source {source} --accept-source-agreements --disable-interactivity",
+            line => lines.Add(line),
+            ct).ConfigureAwait(false);
+
+        var rows = StoreService.ParseWingetSearchLines(lines);
+        if (rows.Count == 0) return null;
+
+        var normFull = StoreService.NormalizeAppKey(fullTitle);
+        var normClean = StoreService.NormalizeAppKey(searchTerm);
+
+        // Prioriza correspondencia exata do nome completo ou limpo, evitando variantes arm64 quando em x64
+        var exact = rows.FirstOrDefault(r =>
+            !r.Id.EndsWith(".arm64", StringComparison.OrdinalIgnoreCase) &&
+            (StoreService.NormalizeAppKey(r.Name) == normFull ||
+             StoreService.NormalizeAppKey(r.Name) == normClean));
+
+        if (!string.IsNullOrWhiteSpace(exact.Id))
+        {
+            return (exact.Name, exact.Id);
+        }
+
+        var prefix = rows.FirstOrDefault(r =>
+            !r.Id.EndsWith(".arm64", StringComparison.OrdinalIgnoreCase) &&
+            (r.Name.StartsWith(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+             fullTitle.StartsWith(r.Name, StringComparison.OrdinalIgnoreCase)));
+
+        if (!string.IsNullOrWhiteSpace(prefix.Id))
+        {
+            return (prefix.Name, prefix.Id);
+        }
+
+        return source == "msstore" ? (rows[0].Name, rows[0].Id) : null;
+    }
+
+    public async Task<bool> InstallByNameAsync(string appName, string? source, CancellationToken ct)
+    {
+        var winget = SystemInfo.FindWinget();
+        if (winget == null || string.IsNullOrWhiteSpace(appName)) return false;
+
+        var safeName = appName.Replace("\"", string.Empty).Trim();
+        var arguments = $"install --name \"{safeName}\" --exact --accept-package-agreements --accept-source-agreements --disable-interactivity";
+        if (!string.IsNullOrWhiteSpace(source))
+        {
+            arguments += $" --source {source}";
+        }
+
+        return await RunWingetInstallCommandAsync(winget, arguments, safeName, source, ct).ConfigureAwait(false);
+    }
+
     public async Task<bool> InstallAsync(string id, string? source, CancellationToken ct)
     {
         var winget = SystemInfo.FindWinget();
@@ -302,12 +433,22 @@ public sealed class WingetService
             return false;
         }
 
-        var arguments = $"install --id \"{id}\" --accept-package-agreements --accept-source-agreements";
+        var arguments = $"install --id \"{id}\" --exact --accept-package-agreements --accept-source-agreements --disable-interactivity";
         if (!string.IsNullOrWhiteSpace(source))
         {
             arguments += $" --source {source}";
         }
 
+        return await RunWingetInstallCommandAsync(winget, arguments, id, source, ct).ConfigureAwait(false);
+    }
+
+    private async Task<bool> RunWingetInstallCommandAsync(
+        string winget,
+        string arguments,
+        string label,
+        string? source,
+        CancellationToken ct)
+    {
         _log.Write($"   [COMANDO] winget {arguments}", LogKind.Command);
 
         var alreadyInstalled = false;
@@ -334,11 +475,11 @@ public sealed class WingetService
 
         if (success)
         {
-            _log.Write($"   [OK] {id} instalado com sucesso via winget ({source ?? "winget"}).", LogKind.Applied);
+            _log.Write($"   [OK] {label} instalado com sucesso via winget ({source ?? "winget"}).", LogKind.Applied);
         }
         else
         {
-            _log.Write($"   [ERRO] winget retornou o código {code} para {id}.", LogKind.Failed);
+            _log.Write($"   [AVISO] winget retornou o código {code} para {label} ({source ?? "winget"}).", LogKind.Warning);
         }
 
         return success;

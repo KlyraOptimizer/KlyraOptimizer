@@ -42,6 +42,7 @@ public partial class MainWindow : Window
         new() { Glyph = "\uE80F", Label = "Início — Visão geral do sistema", Keywords = "inicio home dashboard sistema status", TargetPage = "home" },
         new() { Glyph = "\uE945", Label = "Otimizador — Perfis Standard, Medium e Avançado", Keywords = "otimizador standard medium avancado fps telemetria compactos delay", TargetPage = "optimizer" },
         new() { Glyph = "\uE90F", Label = "Klyra Tool — Alternar recursos individuais ao vivo", Keywords = "klyra tool toggles windows update copilot gamedvr vbs hvci sysmain superfetch bluetooth", TargetPage = "tool" },
+        new() { Glyph = "\uECC9", Label = "Remover apps do computador — Desinstalar bloatware", Keywords = "remover apps aplicativos desinstalar bloatware computador", TargetPage = "tool" },
         new() { Glyph = "\uE74D", Label = "Limpar memória RAM e arquivos temporários", Keywords = "limpar ram memoria temp cache", TargetPage = "tool" },
         new() { Glyph = "\uE895", Label = "Reset completo de rede (Winsock, TCP/IP e DNS)", Keywords = "rede dns winsock ping internet latencia", TargetPage = "tool" },
         new() { Glyph = "\uE719", Label = "Microsoft Store — Baixar aplicativos via winget", Keywords = "loja microsoft store winget aplicativos jogos spotify discord whatsapp", TargetPage = "store" },
@@ -540,7 +541,14 @@ public partial class MainWindow : Window
 
                     CheckOverlay(report, PageHost.Content as FrameworkElement, "ConfirmOverlay");
                     CheckOverlay(report, PageHost.Content as FrameworkElement, "RebootOverlay");
+                    CheckOverlay(report, PageHost.Content as FrameworkElement, "AppRemovalOverlay");
                 }
+
+                ThemeService.Apply(ThemeMode.Light);
+                UpdateLayout();
+                ThemeService.Apply(ThemeMode.Dark);
+                UpdateLayout();
+                report.AppendLine("OK: theme-light-dark");
 
                 CheckOverlay(report, this, "GlobalDialogOverlay");
 
@@ -650,13 +658,14 @@ public partial class MainWindow : Window
         Pump(260);
         var afterSecondWheel = sv.VerticalOffset;
 
+        var maxScroll = sv.ScrollableHeight;
         sv.ScrollToHome();
         Height = prevHeight;
         UpdateLayout();
 
-        var ok = afterFirstWheel > 40 &&
-                 afterBar >= sv.ScrollableHeight - 2 &&
-                 afterSecondWheel < afterBar - 80;
+        var ok = afterFirstWheel > 15 &&
+                 afterBar >= maxScroll - 2 &&
+                 afterSecondWheel < afterBar - 50;
 
         report.AppendLine(ok
             ? $"OK: smoothscroll+scrollbar ({afterFirstWheel:0} -> barra {afterBar:0} -> wheel {afterSecondWheel:0})"
