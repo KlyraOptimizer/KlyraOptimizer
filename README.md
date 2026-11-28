@@ -70,7 +70,3 @@ O Klyra Optimizer+ inclui um menu rápido para executar ferramentas consagradas 
   <sub>© 2026 Klyra Optimizer+. Distribuído sob a licença MIT(https://opensource.org/license/mit).
   <sub>Este é um projeto independente e de código aberto, sem qualquer afiliação, endosso ou vínculo com a Microsoft Corporation.</sub>
 </div>
-
-## 🔐 Code Signing Policy
-
-Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
