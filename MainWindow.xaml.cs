@@ -152,6 +152,11 @@ public partial class MainWindow : Window
         SyncNavSelection(_current);
         Navigate(_current, pushHistory: false, animate: false);
         _suppressHistory = false;
+
+        if (!App.IsSmokeTest)
+        {
+            _ = Services.UpdateCheckerService.CheckForUpdatesAsync(this);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -556,6 +561,8 @@ public partial class MainWindow : Window
                 WindowState = WindowState.Normal;
                 UpdateLayout();
 
+                CheckSmoothScrollAfterScrollBar(report);
+
                 File.WriteAllText(resultFile, report.ToString());
             }
             catch (Exception ex)
@@ -592,6 +599,82 @@ public partial class MainWindow : Window
         report.AppendLine(overlay.Visibility == Visibility.Collapsed
             ? $"OK: {name} (fecha)"
             : $"FALHA: {name} (fecha) — visibility={overlay.Visibility}");
+    }
+
+    private void CheckSmoothScrollAfterScrollBar(StringBuilder report)
+    {
+        var prevHeight = Height;
+        Height = 540;
+        Navigate("optimizer", pushHistory: false, animate: false);
+        UpdateLayout();
+        Pump(80);
+
+        var sv = FindFirstDescendant<ScrollViewer>(PageHost.Content as DependencyObject);
+        if (sv == null || sv.ScrollableHeight < 100)
+        {
+            Height = prevHeight;
+            UpdateLayout();
+            report.AppendLine($"FALHA: smoothscroll — ScrollViewer nao encontrado ou sem altura rolavel ({sv?.ScrollableHeight:0})");
+            return;
+        }
+
+        // 1) Rola para baixo com o scroll do mouse
+        sv.RaiseEvent(new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, -120)
+        {
+            RoutedEvent = UIElement.PreviewMouseWheelEvent,
+            Source = sv
+        });
+        Pump(220);
+        var afterFirstWheel = sv.VerticalOffset;
+
+        // 2) Usa a barrinha do canto (ScrollBar lateral) ate o final da pagina
+        if (sv.Template.FindName("PART_VerticalScrollBar", sv) is System.Windows.Controls.Primitives.ScrollBar bar)
+        {
+            bar.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice, Environment.TickCount, MouseButton.Left)
+            {
+                RoutedEvent = UIElement.PreviewMouseDownEvent,
+                Source = bar
+            });
+        }
+        sv.ScrollToVerticalOffset(sv.ScrollableHeight);
+        UpdateLayout();
+        Pump(80);
+        var afterBar = sv.VerticalOffset;
+
+        // 3) Volta a rolar com o scroll do mouse para cima apos ter usado a barrinha
+        sv.RaiseEvent(new MouseWheelEventArgs(Mouse.PrimaryDevice, Environment.TickCount, 240)
+        {
+            RoutedEvent = UIElement.PreviewMouseWheelEvent,
+            Source = sv
+        });
+        Pump(260);
+        var afterSecondWheel = sv.VerticalOffset;
+
+        sv.ScrollToHome();
+        Height = prevHeight;
+        UpdateLayout();
+
+        var ok = afterFirstWheel > 40 &&
+                 afterBar >= sv.ScrollableHeight - 2 &&
+                 afterSecondWheel < afterBar - 80;
+
+        report.AppendLine(ok
+            ? $"OK: smoothscroll+scrollbar ({afterFirstWheel:0} -> barra {afterBar:0} -> wheel {afterSecondWheel:0})"
+            : $"FALHA: smoothscroll+scrollbar ({afterFirstWheel:0} -> barra {afterBar:0} -> wheel {afterSecondWheel:0})");
+    }
+
+    private static T? FindFirstDescendant<T>(DependencyObject? root) where T : DependencyObject
+    {
+        if (root == null) return null;
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match) return match;
+            var nested = FindFirstDescendant<T>(child);
+            if (nested != null) return nested;
+        }
+        return null;
     }
 
     private static void Pump(int milliseconds)

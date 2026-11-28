@@ -25,7 +25,7 @@ public static class AppServices
 
     public const string AppName = "Klyra Optimizer";
 
-    public const string Version = "1.6.0";
+    public const string Version = "1.6.1";
 
     /// <summary>Pedido de navegacao vindo de qualquer ponto do app.</summary>
     public static Action<string>? NavigationRequested { get; set; }

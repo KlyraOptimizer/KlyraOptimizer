@@ -215,9 +215,10 @@
             </StackPanel>
         </ScrollViewer>
 
-        <!-- ===================== CONTENTDIALOG WIN10: CONFIRMACAO ===================== -->
+        <!-- ===================== CONTENTDIALOG WIN10: ESCOLHAM APPS PARA SEREM REMOVIDOS ===================== -->
         <Grid x:Name="ConfirmOverlay" Background="#99000000" Visibility="Collapsed">
-            <Border Width="520"
+            <Border Width="560"
+                    MaxHeight="560"
                     Background="{DynamicResource App.CardSolid}"
                     BorderBrush="{DynamicResource App.CardStrokeHover}"
                     BorderThickness="1"
@@ -229,24 +230,151 @@
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <StackPanel Grid.Row="0" Margin="24,20,24,20">
-                        <TextBlock Text="Confirmar otimização"
-                                   FontSize="20" FontWeight="Light" Foreground="{DynamicResource App.Text}" />
-                        <TextBlock x:Name="ConfirmSummary" Style="{StaticResource Text.Body}" Margin="0,12,0,0" />
-                        <Border Style="{StaticResource Divider}" />
-                        <TextBlock Style="{StaticResource Text.Caption}"
-                                   Text="As chaves já otimizadas serão detectadas e puladas automaticamente. O relatório completo será gravado na pasta de logs." />
-                    </StackPanel>
+
+                    <Grid Grid.Row="0" Margin="24,20,24,18">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Grid.Row="0">
+                            <TextBlock Text="Escolham apps para serem removidos"
+                                       FontSize="20"
+                                       FontWeight="Light"
+                                       Foreground="{DynamicResource App.Text}" />
+                            <TextBlock x:Name="AppRemovalSubtitle"
+                                       Style="{StaticResource Text.Caption}"
+                                       Margin="0,6,0,12"
+                                       Text="Os aplicativos desnecessários padrão já vêm marcados automaticamente. Desmarque caso queira manter algum deles." />
+                        </StackPanel>
+
+                        <!-- Estado central de carregamento: ProgressRing + "Carregando apps do computador" -->
+                        <StackPanel x:Name="AppRemovalLoadingPanel"
+                                    Grid.Row="1"
+                                    MinHeight="230"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center">
+                            <views:Win10ProgressRing Width="36" Height="36" HorizontalAlignment="Center" />
+                            <TextBlock Text="Carregando apps do computador"
+                                       Style="{StaticResource Text.Body}"
+                                       Foreground="{DynamicResource App.TextSecondary}"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,14,0,0" />
+                        </StackPanel>
+
+                        <!-- Lista de aplicativos carregados com CheckBox ao lado -->
+                        <Grid x:Name="AppRemovalListContainer"
+                              Grid.Row="1"
+                              Visibility="Collapsed">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0" Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Name="SelectedAppsCountText"
+                                           Style="{StaticResource Text.Caption}"
+                                           VerticalAlignment="Center"
+                                           Text="0 selecionado(s)" />
+                                <TextBlock x:Name="SelectedProfileSummaryText"
+                                           Grid.Column="1"
+                                           Style="{StaticResource Text.Caption}"
+                                           Foreground="{DynamicResource App.AccentText}"
+                                           VerticalAlignment="Center" />
+                            </Grid>
+
+                            <Border Grid.Row="1"
+                                    Height="286"
+                                    Background="{DynamicResource App.Layer}"
+                                    BorderBrush="{DynamicResource App.Divider}"
+                                    BorderThickness="1"
+                                    CornerRadius="0">
+                                <Grid>
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                        <ItemsControl x:Name="RemovableAppsList" AlternationCount="512">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel>
+                                                        <Border x:Name="RowSep" Height="1" Background="{DynamicResource App.Divider}" Margin="12,0" />
+                                                        <Grid Margin="12,9" Background="Transparent">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+
+                                                            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+                                                                <TextBlock Text="{Binding DisplayName}"
+                                                                           FontSize="13.5"
+                                                                           Foreground="{DynamicResource App.Text}"
+                                                                           TextTrimming="CharacterEllipsis" />
+                                                                <TextBlock Text="{Binding PackageName}"
+                                                                           FontSize="11"
+                                                                           Foreground="{DynamicResource App.TextTertiary}"
+                                                                           TextTrimming="CharacterEllipsis" />
+                                                            </StackPanel>
+
+                                                            <Border x:Name="DefaultChip"
+                                                                    Grid.Column="1"
+                                                                    Style="{StaticResource Chip.Accent}"
+                                                                    Padding="6,2"
+                                                                    Margin="0,0,12,0"
+                                                                    Visibility="Collapsed">
+                                                                <TextBlock Text="Padrão" FontSize="10" Foreground="{DynamicResource App.AccentText}" />
+                                                            </Border>
+
+                                                            <CheckBox Grid.Column="2"
+                                                                      Style="{StaticResource Check.Fluent}"
+                                                                      IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                                      VerticalAlignment="Center"
+                                                                      Click="RemovableAppCheck_Click" />
+                                                        </Grid>
+                                                    </StackPanel>
+                                                    <DataTemplate.Triggers>
+                                                        <DataTrigger Binding="{Binding (ItemsControl.AlternationIndex), RelativeSource={RelativeSource AncestorType=ContentPresenter}}" Value="0">
+                                                            <Setter TargetName="RowSep" Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsDefault}" Value="True">
+                                                            <Setter TargetName="DefaultChip" Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </DataTemplate.Triggers>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+
+                                    <TextBlock x:Name="NoRemovableAppsText"
+                                               Text="Nenhum aplicativo pré-instalado removível foi encontrado neste computador."
+                                               Style="{StaticResource Text.Caption}"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               Margin="24"
+                                               TextAlignment="Center"
+                                               Visibility="Collapsed" />
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </Grid>
+
                     <Border Grid.Row="1"
                             Background="{DynamicResource App.DialogFooter}"
                             BorderBrush="{DynamicResource App.Divider}"
                             BorderThickness="0,1,0,0"
                             Padding="24,16">
                         <UniformGrid Columns="2">
-                            <Button Content="Aplicar agora" Style="{StaticResource Btn.Accent}" Margin="0,0,4,0"
-                                    Click="ConfirmApply_Click" />
-                            <Button Content="Cancelar" Style="{StaticResource Btn.Standard}" Margin="4,0,0,0"
+                            <Button Content="Cancelar"
+                                    Style="{StaticResource Btn.Standard}"
+                                    Margin="0,0,4,0"
                                     Click="CancelConfirm_Click" />
+                            <Button x:Name="ConfirmApplyButton"
+                                    Content="Aplicar Otimização"
+                                    Style="{StaticResource Btn.Accent}"
+                                    Margin="4,0,0,0"
+                                    Click="ConfirmApply_Click" />
                         </UniformGrid>
                     </Border>
                 </Grid>

@@ -4,7 +4,7 @@
 ; =============================================================================
 
 #define AppName        "Klyra Optimizer"
-#define AppVersion     "1.6.0"
+#define AppVersion     "1.6.1"
 #define AppPublisher   "Klyra Optimizer"
 #define AppExe         "KlyraOptimizer.exe"
 #define AppId          "{{7B4C9E12-8D51-4A7E-9B24-3E9F1C40A815}"

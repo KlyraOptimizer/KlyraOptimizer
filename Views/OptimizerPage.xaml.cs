@@ -1,13 +1,40 @@
-﻿using System.Windows;
+﻿using System.ComponentModel;
+using System.Windows;
 using System.Windows.Controls;
 using KlyraOptimizer.Core;
 using KlyraOptimizer.Services;
 
 namespace KlyraOptimizer.Views;
 
+public sealed class SelectableRemovableApp : INotifyPropertyChanged
+{
+    private bool _isSelected;
+
+    public required string PackageName { get; init; }
+
+    public required string DisplayName { get; init; }
+
+    public bool IsDefault { get; init; }
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set
+        {
+            if (_isSelected == value) return;
+            _isSelected = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsSelected)));
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+}
+
 public partial class OptimizerPage : UserControl, IRefreshablePage
 {
     private OptimizerOptions? _pending;
+    private List<SelectableRemovableApp> _removableApps = new();
+    private CancellationTokenSource? _loadAppsCts;
 
     public OptimizerPage()
     {
@@ -104,36 +131,101 @@ public partial class OptimizerPage : UserControl, IRefreshablePage
         Motion.Pulse(target);
     }
 
-    private void Apply_Click(object sender, RoutedEventArgs e)
+    private async void Apply_Click(object sender, RoutedEventArgs e)
     {
         if (AppServices.Optimizer.Busy) return;
 
         var options = BuildOptions();
         _pending = options;
 
-        ConfirmSummary.Text =
-            $"Modo selecionado: {options.ModeName}\n" +
-            $"CompactOS: {CompactLabel(options.Compact)}\n" +
-            $"Windows Update: {(options.Update == UpdateChoice.Disable ? "desativar" : "manter ativo com proteção de drivers")}\n" +
-            $"Microsoft Store: {StoreLabel(options.Store)}\n" +
-            $"Bluetooth: {(options.DisableBluetooth ? "desativar serviços" : "manter ativo")}\n" +
-            $"MenuShowDelay: {options.MenuShowDelayMs} ms\n" +
-            "Ponto de restauração: proteção verificada/ativada e ponto criado automaticamente antes de aplicar.";
+        _loadAppsCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _loadAppsCts = cts;
+
+        SelectedProfileSummaryText.Text = options.Mode switch
+        {
+            ActiveMode.Advanced => "Perfil: Modo Avançado",
+            ActiveMode.Medium => "Perfil: Modo Medium",
+            _ => "Perfil: Modo Standard"
+        };
+
+        // Abre imediatamente a janela "Escolham apps para serem removidos" com o ProgressRing central
+        AppRemovalLoadingPanel.Visibility = Visibility.Visible;
+        AppRemovalListContainer.Visibility = Visibility.Collapsed;
+        NoRemovableAppsText.Visibility = Visibility.Collapsed;
+        ConfirmApplyButton.IsEnabled = false;
+        RemovableAppsList.ItemsSource = null;
+        _removableApps.Clear();
 
         Motion.ShowOverlay(ConfirmOverlay);
+
+        try
+        {
+            var apps = await AppServices.Optimizer.GetRemovableAppsAsync(cts.Token);
+            if (cts.IsCancellationRequested) return;
+
+            _removableApps = apps
+                .Select(a => new SelectableRemovableApp
+                {
+                    PackageName = a.PackageName,
+                    DisplayName = a.DisplayName,
+                    IsDefault = a.IsDefaultSelected,
+                    IsSelected = a.IsDefaultSelected
+                })
+                .ToList();
+
+            RemovableAppsList.ItemsSource = _removableApps;
+            NoRemovableAppsText.Visibility = _removableApps.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            UpdateSelectedAppsCounter();
+
+            AppRemovalLoadingPanel.Visibility = Visibility.Collapsed;
+            AppRemovalListContainer.Visibility = Visibility.Visible;
+            Motion.FadeIn(AppRemovalListContainer, 8, 160);
+            ConfirmApplyButton.IsEnabled = true;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch
+        {
+            AppRemovalLoadingPanel.Visibility = Visibility.Collapsed;
+            AppRemovalListContainer.Visibility = Visibility.Visible;
+            NoRemovableAppsText.Visibility = Visibility.Visible;
+            ConfirmApplyButton.IsEnabled = true;
+        }
+    }
+
+    private void RemovableAppCheck_Click(object sender, RoutedEventArgs e)
+    {
+        UpdateSelectedAppsCounter();
+    }
+
+    private void UpdateSelectedAppsCounter()
+    {
+        var selectedCount = _removableApps.Count(a => a.IsSelected);
+        SelectedAppsCountText.Text = selectedCount == 0
+            ? "Nenhum aplicativo marcado para remoção"
+            : $"{selectedCount} de {_removableApps.Count} aplicativo(s) marcado(s) para remoção";
     }
 
     private void CancelConfirm_Click(object sender, RoutedEventArgs e)
     {
+        _loadAppsCts?.Cancel();
         Motion.HideOverlay(ConfirmOverlay);
         _pending = null;
     }
 
     private async void ConfirmApply_Click(object sender, RoutedEventArgs e)
     {
-        Motion.HideOverlay(ConfirmOverlay);
         var options = _pending;
         if (options == null) return;
+
+        options.SelectedAppsToRemove = _removableApps
+            .Where(a => a.IsSelected)
+            .Select(a => a.PackageName)
+            .ToList();
+
+        Motion.HideOverlay(ConfirmOverlay);
 
         if (!await Shell.RequireAdminAsync()) return;
 
@@ -145,7 +237,6 @@ public partial class OptimizerPage : UserControl, IRefreshablePage
         SetBusy(true);
         CompletionBar.Value = 5;
         CompletionBar.Visibility = Visibility.Visible;
-        StatusText.Text = $"Aplicando {options.ModeName} em segundo plano...";
 
         OptimizerSummary summary;
 
@@ -229,18 +320,4 @@ public partial class OptimizerPage : UserControl, IRefreshablePage
             MenuShowDelayMs = (int)Math.Round(MenuDelaySlider.Value)
         };
     }
-
-    private static string CompactLabel(CompactMode mode) => mode switch
-    {
-        CompactMode.Never => "descomprimir (never)",
-        CompactMode.Always => "comprimir (always)",
-        _ => "manter atual"
-    };
-
-    private static string StoreLabel(StoreChoice choice) => choice switch
-    {
-        StoreChoice.RemoveApp => "remover aplicativo + desativar serviços",
-        StoreChoice.ServicesOnly => "apenas desativar serviços em segundo plano",
-        _ => "manter Microsoft Store intacta"
-    };
 }

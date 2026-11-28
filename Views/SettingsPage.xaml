@@ -176,7 +176,7 @@
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock Text="Klyra Optimizer" Style="{StaticResource Text.CardTitle}" FontSize="17" FontWeight="SemiBold" />
                             <TextBlock x:Name="AboutVersion" Style="{StaticResource Text.Caption}" Margin="0,2,0,0"
-                                       Text="Versão 1.6.0 — Windows 10 Fluent Edition (1809/1903)" />
+                                       Text="Versão 1.6.1 — Windows 10 Fluent Edition (1809/1903)" />
                         </StackPanel>
                     </StackPanel>
                     <TextBlock Style="{StaticResource Text.Body}" Margin="0,12,0,0"

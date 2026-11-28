@@ -1,4 +1,5 @@
 ﻿using System.IO;
+using System.Text.Json;
 using KlyraOptimizer.Core;
 using Microsoft.Win32;
 
@@ -37,6 +38,12 @@ public sealed class OptimizerOptions
     public bool DisableBluetooth { get; set; }
 
     public int MenuShowDelayMs { get; set; } = 50;
+
+    /// <summary>
+    /// Lista explicita de pacotes AppX escolhidos pelo usuario na janela "Escolham apps para serem removidos".
+    /// Quando null (ex.: migracao rapida de perfil no Klyra Tool), usa os padroes do Modo Medium.
+    /// </summary>
+    public List<string>? SelectedAppsToRemove { get; set; }
 
     public string ModeName => Mode switch
     {
@@ -78,6 +85,15 @@ public sealed class ConflictItem
     public bool Detected { get; init; }
 }
 
+public sealed class RemovableAppInfo
+{
+    public required string PackageName { get; init; }
+
+    public required string DisplayName { get; init; }
+
+    public bool IsDefaultSelected { get; init; }
+}
+
 /// <summary>
 /// Todas as camadas de otimizacao do Klyra Optimizer:
 /// Modo Standard, Medium e Avancado, escolhas interativas, reversao total,
@@ -98,6 +114,101 @@ public sealed class OptimizationService
     private const string GraphicsDrivers = @"HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers";
     private const string GpuScheduler = @"HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers\Scheduler";
     private const string ServicesKey = @"HKLM\SYSTEM\CurrentControlSet\Services";
+
+    /// <summary>Pacotes AppX pre-selecionados por padrao pelo Klyra Optimizer para remocao.</summary>
+    public static readonly IReadOnlyList<string> DefaultRemovableApps = new[]
+    {
+        "Microsoft.BingNews",
+        "Microsoft.BingWeather",
+        "Microsoft.GetHelp",
+        "Microsoft.Getstarted",
+        "Microsoft.MicrosoftSolitaireCollection",
+        "Microsoft.MicrosoftOfficeHub",
+        "Microsoft.People",
+        "Microsoft.PowerAutomateDesktop",
+        "Microsoft.WindowsFeedbackHub",
+        "Microsoft.WindowsMaps",
+        "Microsoft.SkypeApp",
+        "Clipchamp.Clipchamp",
+        "Microsoft.Copilot"
+    };
+
+    private static readonly Dictionary<string, string> FriendlyAppNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Microsoft.BingNews"] = "Microsoft Notícias (MSN News)",
+        ["Microsoft.BingWeather"] = "Clima (MSN Weather)",
+        ["Microsoft.GetHelp"] = "Obter Ajuda (Get Help)",
+        ["Microsoft.Getstarted"] = "Dicas do Windows (Tips)",
+        ["Microsoft.MicrosoftSolitaireCollection"] = "Microsoft Solitaire Collection",
+        ["Microsoft.MicrosoftOfficeHub"] = "Microsoft 365 (Office)",
+        ["Microsoft.People"] = "Pessoas (Microsoft People)",
+        ["Microsoft.PowerAutomateDesktop"] = "Power Automate",
+        ["Microsoft.WindowsFeedbackHub"] = "Hub de Comentários (Feedback Hub)",
+        ["Microsoft.WindowsMaps"] = "Mapas do Windows",
+        ["Microsoft.SkypeApp"] = "Skype",
+        ["Clipchamp.Clipchamp"] = "Microsoft Clipchamp",
+        ["Microsoft.Copilot"] = "Microsoft Copilot",
+        ["Microsoft.WindowsAlarms"] = "Alarmes e Relógio",
+        ["Microsoft.WindowsCamera"] = "Câmera do Windows",
+        ["Microsoft.WindowsSoundRecorder"] = "Gravador de Voz",
+        ["Microsoft.YourPhone"] = "Vincular ao Celular (Phone Link)",
+        ["Microsoft.WindowsCommunicationsApps"] = "Email e Calendário",
+        ["Microsoft.ZuneMusic"] = "Mídia / Groove Música",
+        ["Microsoft.ZuneVideo"] = "Filmes e TV",
+        ["Microsoft.MixedReality.Portal"] = "Portal de Realidade Misturada",
+        ["Microsoft.MSPaint"] = "Paint 3D",
+        ["Microsoft.Microsoft3DViewer"] = "Visualizador 3D",
+        ["Microsoft.MicrosoftStickyNotes"] = "Notas Autoadesivas (Sticky Notes)",
+        ["Microsoft.ScreenSketch"] = "Captura e Esboço",
+        ["Microsoft.Todos"] = "Microsoft To Do",
+        ["Microsoft.Whiteboard"] = "Microsoft Whiteboard",
+        ["Microsoft.OneConnect"] = "Planos de Celular",
+        ["Microsoft.Print3D"] = "Print 3D",
+        ["Microsoft.Wallet"] = "Microsoft Pay / Wallet",
+        ["Microsoft.XboxApp"] = "Xbox Companion",
+        ["Microsoft.GamingApp"] = "Aplicativo Xbox",
+        ["Microsoft.XboxGamingOverlay"] = "Xbox Game Bar",
+        ["Microsoft.XboxSpeechToTextOverlay"] = "Xbox Speech To Text",
+        ["Microsoft.549981C3F5F10"] = "Cortana",
+        ["MicrosoftTeams"] = "Microsoft Teams",
+        ["MSTeams"] = "Microsoft Teams",
+        ["Microsoft.OutlookForWindows"] = "Outlook para Windows",
+        ["Microsoft.WindowsCalculator"] = "Calculadora do Windows",
+        ["Microsoft.Windows.Photos"] = "Fotos do Windows",
+        ["Microsoft.WindowsNotepad"] = "Bloco de Notas",
+        ["Microsoft.Paint"] = "Paint"
+    };
+
+    private static readonly string[] ProtectedAppxPrefixes =
+    {
+        "Microsoft.WindowsStore",
+        "Microsoft.StorePurchaseApp",
+        "Microsoft.DesktopAppInstaller",
+        "Microsoft.VCLibs",
+        "Microsoft.NET",
+        "Microsoft.UI.Xaml",
+        "Microsoft.WindowsAppRuntime",
+        "Microsoft.DirectX",
+        "Microsoft.Services.Store",
+        "Microsoft.Advertising",
+        "Microsoft.WebMediaExtensions",
+        "Microsoft.VP9VideoExtensions",
+        "Microsoft.HEIFImageExtension",
+        "Microsoft.HEVCVideoExtension",
+        "Microsoft.MPEG2VideoExtension",
+        "Microsoft.RawImageExtension",
+        "Microsoft.WebpImageExtension",
+        "Microsoft.AV1VideoExtension",
+        "Microsoft.SecHealthUI",
+        "Microsoft.AAD",
+        "Microsoft.AccountsControl",
+        "Microsoft.LockApp",
+        "Microsoft.Windows.ShellExperienceHost",
+        "Microsoft.Windows.StartMenuExperienceHost",
+        "MicrosoftWindows.Client.WebExperience",
+        "Windows.CBSPreview",
+        "Windows.PrintDialog"
+    };
 
     public OptimizationService(AppLog log, TweakEngine engine, SystemInfo system, GpuMsiService gpu)
     {
@@ -130,8 +241,14 @@ public sealed class OptimizationService
             }
 
             ApplyStandard(options, ct);
-            if (options.Mode >= ActiveMode.Medium) ApplyMedium(ct);
+            if (options.Mode >= ActiveMode.Medium) ApplyMedium(ct, skipDefaultDebloat: options.SelectedAppsToRemove != null);
             if (options.Mode >= ActiveMode.Advanced) ApplyAdvanced(ct);
+
+            if (options.SelectedAppsToRemove is { Count: > 0 })
+            {
+                RemoveSelectedAppxPackages(options.SelectedAppsToRemove, ct);
+            }
+
             ApplyInteractive(options, ct);
 
             _system.SetActiveMode(options.Mode);
@@ -204,7 +321,7 @@ public sealed class OptimizationService
     // ==================================================================
     // FASE 2 - MEDIUM
     // ==================================================================
-    public void ApplyMedium(CancellationToken ct)
+    public void ApplyMedium(CancellationToken ct, bool skipDefaultDebloat = false)
     {
         _log.Phase("FASE 2 - MODO MEDIUM (rede, serviços e bloatware)");
 
@@ -230,21 +347,10 @@ public sealed class OptimizationService
 
         ct.ThrowIfCancellationRequested();
 
-        _log.Write("   [*] Removendo apps pre-instalados desnecessarios (AppX)...", LogKind.Info);
-        const string debloat = @"
-$apps = @('Microsoft.BingNews','Microsoft.BingWeather','Microsoft.GetHelp','Microsoft.Getstarted',
-          'Microsoft.MicrosoftSolitaireCollection','Microsoft.MicrosoftOfficeHub','Microsoft.People',
-          'Microsoft.PowerAutomateDesktop','Microsoft.WindowsFeedbackHub','Microsoft.WindowsMaps',
-          'Microsoft.SkypeApp','Clipchamp.Clipchamp','Microsoft.Copilot');
-$n = 0;
-foreach ($a in $apps) {
-    $p = Get-AppxPackage -Name ""*$a*"" -ErrorAction SilentlyContinue;
-    if ($p) { $p | Remove-AppxPackage -ErrorAction SilentlyContinue; $n++ }
-}
-Write-Output ('   Pacotes AppX removidos: ' + $n)";
-
-        Shell.RunPowerShellAsync(debloat, line => _log.Write(line, LogKind.Info)).GetAwaiter().GetResult();
-        _engine.MarkApplied("Debloat AppX executado");
+        if (!skipDefaultDebloat)
+        {
+            RemoveSelectedAppxPackages(DefaultRemovableApps, ct);
+        }
 
         Set(@"HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "EnableTransparency", 0, "Desativar Transparência Visual");
         Set(@"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "TaskbarAnimations", 0, "Desativar Animações da Barra de Tarefas");
@@ -259,6 +365,150 @@ Write-Output ('   Pacotes AppX removidos: ' + $n)";
                 "nul",
                 $"Bloqueio IFEO {process}");
         }
+    }
+
+    public void RemoveSelectedAppxPackages(IReadOnlyCollection<string> packageNames, CancellationToken ct = default)
+    {
+        if (packageNames == null || packageNames.Count == 0) return;
+
+        _log.Phase("REMOÇÃO SELETIVA DE APLICATIVOS");
+        var quoted = string.Join(",", packageNames.Select(p => $"'{p.Replace("'", "''")}'"));
+        var script = $@"
+$targets = @({quoted})
+$n = 0
+foreach ($a in $targets) {{
+    $pkgs = @(Get-AppxPackage -Name $a -ErrorAction SilentlyContinue)
+    if ($pkgs.Count -eq 0) {{
+        $pkgs = @(Get-AppxPackage -Name ""*$a*"" -ErrorAction SilentlyContinue)
+    }}
+    foreach ($p in $pkgs) {{
+        try {{
+            $p | Remove-AppxPackage -ErrorAction Stop
+            $n++
+            Write-Output ('   [REMOVIDO] ' + $p.Name)
+        }} catch {{
+            Write-Output ('   [AVISO] Não foi possível remover ' + $p.Name)
+        }}
+    }}
+}}
+Write-Output ('   Total de aplicativos removidos: ' + $n)";
+
+        Shell.RunPowerShellAsync(script, line =>
+        {
+            if (!string.IsNullOrWhiteSpace(line)) _log.Write(line, LogKind.Info);
+        }, ct).GetAwaiter().GetResult();
+
+        _engine.MarkApplied($"Remoção de aplicativos ({packageNames.Count} selecionado(s))");
+    }
+
+    /// <summary>
+    /// Carrega os aplicativos AppX removiveis instalados no computador, marcando automaticamente
+    /// os pacotes de bloatware padrao do Klyra Optimizer.
+    /// </summary>
+    public async Task<List<RemovableAppInfo>> GetRemovableAppsAsync(CancellationToken ct = default)
+    {
+        return await Task.Run(() =>
+        {
+            var result = new List<RemovableAppInfo>();
+            const string script = @"
+$pkgs = @(Get-AppxPackage -ErrorAction SilentlyContinue |
+    Where-Object { -not $_.IsFramework -and -not $_.NonRemovable -and $_.SignatureKind -ne 'System' } |
+    Select-Object -ExpandProperty Name -Unique)
+ConvertTo-Json -InputObject $pkgs -Compress";
+
+            try
+            {
+                var json = Shell.RunPowerShellCapture(script, timeoutMs: 25000);
+                if (string.IsNullOrWhiteSpace(json)) return result;
+
+                var start = json.IndexOfAny(new[] { '[', '"' });
+                if (start < 0) return result;
+                var payload = json[start..].Trim();
+
+                var names = new List<string>();
+                using var doc = JsonDocument.Parse(payload);
+                if (doc.RootElement.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var el in doc.RootElement.EnumerateArray())
+                    {
+                        if (el.ValueKind == JsonValueKind.String && el.GetString() is { Length: > 0 } s)
+                            names.Add(s);
+                    }
+                }
+                else if (doc.RootElement.ValueKind == JsonValueKind.String && doc.RootElement.GetString() is { Length: > 0 } single)
+                {
+                    names.Add(single);
+                }
+
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var pkgName in names)
+                {
+                    if (!seen.Add(pkgName)) continue;
+                    if (IsProtectedPackage(pkgName)) continue;
+
+                    var isDefault = DefaultRemovableApps.Any(d =>
+                        pkgName.Equals(d, StringComparison.OrdinalIgnoreCase) ||
+                        pkgName.Contains(d, StringComparison.OrdinalIgnoreCase));
+
+                    var display = ResolveFriendlyAppName(pkgName);
+                    result.Add(new RemovableAppInfo
+                    {
+                        PackageName = pkgName,
+                        DisplayName = display,
+                        IsDefaultSelected = isDefault
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _log.Write($"   [AVISO] Falha ao listar aplicativos removíveis: {ex.Message}", LogKind.Warning);
+            }
+
+            return result
+                .OrderByDescending(a => a.IsDefaultSelected)
+                .ThenBy(a => a.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+        }, ct).ConfigureAwait(false);
+    }
+
+    private static bool IsProtectedPackage(string packageName)
+    {
+        foreach (var prefix in ProtectedAppxPrefixes)
+        {
+            if (packageName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    private static string ResolveFriendlyAppName(string packageName)
+    {
+        if (FriendlyAppNames.TryGetValue(packageName, out var exact))
+            return exact;
+
+        foreach (var (key, friendly) in FriendlyAppNames)
+        {
+            if (packageName.StartsWith(key, StringComparison.OrdinalIgnoreCase))
+                return friendly;
+        }
+
+        // Formata nomes como "SpotifyAB.SpotifyMusic" -> "Spotify Music"
+        var clean = packageName;
+        var dot = clean.LastIndexOf('.');
+        if (dot > 0 && dot < clean.Length - 2)
+        {
+            var prefix = clean[..dot];
+            if (prefix.Equals("Microsoft", StringComparison.OrdinalIgnoreCase) ||
+                prefix.Contains("AB", StringComparison.OrdinalIgnoreCase) ||
+                prefix.Contains("Inc", StringComparison.OrdinalIgnoreCase) ||
+                prefix.Length <= 16)
+            {
+                clean = clean[(dot + 1)..];
+            }
+        }
+
+        return clean;
     }
 
     // ==================================================================
